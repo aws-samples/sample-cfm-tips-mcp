@@ -34,8 +34,8 @@ We welcome contributions to the CFM Tips AWS Cost Optimization MCP Server! This 
 
 1. **Fork the repository**
    ```bash
-   git clone git@ssh.gitlab.aws.dev:cfm-tips/cfm-tips-mcp.git
-   cd cfm-tips-mcp
+   git clone git@github.com:aws-samples/sample-cfm-tips-mcp.git
+   cd sample-cfm-tips-mcp
    ```
 
 2. **Create a virtual environment**
