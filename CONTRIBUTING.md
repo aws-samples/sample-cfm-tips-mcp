@@ -1,59 +1,242 @@
-# Contributing Guidelines
+# Contributing to CFM Tips AWS Cost Optimization MCP Server
 
-Thank you for your interest in contributing to our project. Whether it's a bug report, new feature, correction, or additional
-documentation, we greatly value feedback and contributions from our community.
+We welcome contributions to the CFM Tips AWS Cost Optimization MCP Server! This document provides guidelines for contributing to the project.
 
-Please read through this document before submitting any issues or pull requests to ensure we have all the necessary
-information to effectively respond to your bug report or contribution.
+## 🤝 How to Contribute
 
+### Reporting Issues
 
-## Reporting Bugs/Feature Requests
+1. **Search existing issues** first to avoid duplicates
+2. **Use the issue template** when creating new issues
+3. **Provide detailed information** including:
+   - AWS region and services affected
+   - Error messages and logs
+   - Steps to reproduce
+   - Expected vs actual behavior
 
-We welcome you to use the GitHub issue tracker to report bugs or suggest features.
+### Suggesting Features
 
-When filing an issue, please check existing open, or recently closed, issues to make sure somebody else hasn't already
-reported the issue. Please try to include as much information as you can. Details like these are incredibly useful:
+1. **Check existing feature requests** to avoid duplicates
+2. **Describe the use case** and business value
+3. **Provide implementation ideas** if you have them
+4. **Consider backward compatibility**
 
-* A reproducible test case or series of steps
-* The version of our code being used
-* Any modifications you've made relevant to the bug
-* Anything unusual about your environment or deployment
+### Code Contributions
 
+#### Prerequisites
 
-## Contributing via Pull Requests
-Contributions via pull requests are much appreciated. Before sending us a pull request, please ensure that:
+- Python 3.11 or higher
+- AWS CLI configured with test credentials
+- Familiarity with MCP (Model Context Protocol)
+- Understanding of AWS cost optimization concepts
 
-1. You are working against the latest source on the *main* branch.
-2. You check existing open, and recently merged, pull requests to make sure someone else hasn't addressed the problem already.
-3. You open an issue to discuss any significant work - we would hate for your time to be wasted.
+#### Development Setup
 
-To send us a pull request, please:
+1. **Fork the repository**
+   ```bash
+   git clone git@ssh.gitlab.aws.dev:cfm-tips/cfm-tips-mcp.git
+   cd cfm-tips-mcp
+   ```
 
-1. Fork the repository.
-2. Modify the source; please focus on the specific change you are contributing. If you also reformat all the code, it will be hard for us to focus on your change.
-3. Ensure local tests pass.
-4. Commit to your fork using clear commit messages.
-5. Send us a pull request, answering any default questions in the pull request interface.
-6. Pay attention to any automated CI failures reported in the pull request, and stay involved in the conversation.
+2. **Create a virtual environment**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-GitHub provides additional document on [forking a repository](https://help.github.com/articles/fork-a-repo/) and
-[creating a pull request](https://help.github.com/articles/creating-a-pull-request/).
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   pip install -r requirements_dev.txt  # If available
+   ```
 
+4. **Run tests**
+   ```bash
+   python3 test_runbooks.py
+   ```
 
-## Finding contributions to work on
-Looking at the existing issues is a great way to find something to contribute on. As our projects, by default, use the default GitHub issue labels (enhancement/bug/duplicate/help wanted/invalid/question/wontfix), looking at any 'help wanted' issues is a great place to start.
+#### Making Changes
 
+1. **Create a feature branch**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
 
-## Code of Conduct
-This project has adopted the [Amazon Open Source Code of Conduct](https://aws.github.io/code-of-conduct).
-For more information see the [Code of Conduct FAQ](https://aws.github.io/code-of-conduct-faq) or contact
-opensource-codeofconduct@amazon.com with any additional questions or comments.
+2. **Make your changes**
+   - Follow existing code style and patterns
+   - Add docstrings to new functions
+   - Include error handling
+   - Update documentation as needed
 
+3. **Test your changes**
+   ```bash
+   # Run integration tests
+   python3 test_runbooks.py
+   
+   # Test specific functionality
+   python3 -c "from runbook_functions import your_function; print('OK')"
+   
+   # Test with Amazon Q (if possible)
+   q chat --mcp-config "$(pwd)/mcp_runbooks.json"
+   ```
 
-## Security issue notifications
-If you discover a potential security issue in this project we ask that you notify AWS/Amazon Security via our [vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/). Please do **not** create a public github issue.
+4. **Update documentation**
+   - Update README.md if needed
+   - Update RUNBOOKS_GUIDE.md for new features
+   - Add examples for new tools
 
+#### Code Style Guidelines
 
-## Licensing
+- **Follow PEP 8** Python style guidelines
+- **Use descriptive variable names**
+- **Add type hints** where appropriate
+- **Include docstrings** for all functions
+- **Handle errors gracefully** with informative messages
+- **Use async/await** for MCP tool functions
 
-See the [LICENSE](LICENSE) file for our project's licensing. We will ask you to confirm the licensing of your contribution.
+#### Example Code Structure
+
+```python
+async def your_new_tool(arguments: Dict[str, Any]) -> List[TextContent]:
+    """
+    Brief description of what the tool does.
+    
+    Args:
+        arguments: Dictionary containing tool parameters
+        
+    Returns:
+        List of TextContent with results
+    """
+    try:
+        # Validate inputs
+        region = arguments.get("region")
+        if not region:
+            return [TextContent(type="text", text="Error: region parameter is required")]
+        
+        # Create AWS client
+        client = boto3.client('service-name', region_name=region)
+        
+        # Make API calls
+        response = client.some_api_call()
+        
+        # Process results
+        result = {
+            "status": "success",
+            "data": response,
+            "message": "Operation completed successfully"
+        }
+        
+        return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+        
+    except ClientError as e:
+        error_msg = f"AWS API Error: {e.response['Error']['Code']} - {e.response['Error']['Message']}"
+        return [TextContent(type="text", text=f"Error: {error_msg}")]
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error: {str(e)}")]
+```
+
+#### Adding New Tools
+
+1. **Add tool definition** to `list_tools()` in `mcp_server_with_runbooks.py`
+2. **Add tool handler** to `call_tool()` function
+3. **Implement tool function** in `runbook_functions.py`
+4. **Add tests** for the new functionality
+5. **Update documentation**
+
+#### Submitting Changes
+
+1. **Commit your changes**
+   ```bash
+   git add .
+   git commit -m "feat: add new cost optimization tool for XYZ"
+   ```
+
+2. **Push to your fork**
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+3. **Create a Pull Request**
+   - Use a descriptive title
+   - Explain what the PR does and why
+   - Reference any related issues
+   - Include testing instructions
+
+## 📋 Pull Request Guidelines
+
+### PR Title Format
+- `feat:` for new features
+- `fix:` for bug fixes
+- `docs:` for documentation changes
+- `refactor:` for code refactoring
+- `test:` for test additions/changes
+
+### PR Description Should Include
+- **What** the PR does
+- **Why** the change is needed
+- **How** to test the changes
+- **Screenshots** if UI changes are involved
+- **Breaking changes** if any
+
+### Review Process
+1. **Automated checks** must pass
+2. **Code review** by maintainers
+3. **Testing** in different environments
+4. **Documentation** review if applicable
+
+## 🧪 Testing Guidelines
+
+### Integration Tests
+- All existing tests must pass
+- Add tests for new functionality
+- Test with real AWS resources when possible
+- Include error case testing
+
+### Manual Testing
+- Test with Amazon Q CLI
+- Verify tool responses are properly formatted
+- Check error handling with invalid inputs
+- Test in different AWS regions
+
+## 📚 Documentation Standards
+
+### Code Documentation
+- **Docstrings** for all public functions
+- **Inline comments** for complex logic
+- **Type hints** for function parameters and returns
+
+### User Documentation
+- **Clear examples** for new tools
+- **Parameter descriptions** with types and defaults
+- **Error scenarios** and troubleshooting tips
+- **Use cases** and expected outcomes
+
+## 🏷️ Release Process
+
+1. **Version bumping** follows semantic versioning
+2. **Changelog** is updated with new features and fixes
+3. **Documentation** is updated for new releases
+4. **Testing** is performed across different environments
+
+## 🆘 Getting Help
+
+- **GitHub Issues** for bugs and feature requests
+- **GitHub Discussions** for questions and ideas
+- **Documentation** for usage guidelines
+- **Code comments** for implementation details
+
+## 📜 Code of Conduct
+
+- Be respectful and inclusive
+- Focus on constructive feedback
+- Help others learn and grow
+- Follow the project's coding standards
+
+## 🙏 Recognition
+
+Contributors will be recognized in:
+- README.md contributors section
+- Release notes for significant contributions
+- GitHub contributor graphs
+
+Thank you for contributing to CFM Tips AWS Cost Optimization MCP Server!
