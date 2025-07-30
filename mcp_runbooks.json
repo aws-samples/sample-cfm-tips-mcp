@@ -1,0 +1,30 @@
+{
+  "mcpServers": {
+    "cfm-tips": {
+      "command": "python3",
+      "args": [
+        "<replace-with-project-folder-path>/mcp_server_with_runbooks.py"
+      ],
+      "env": {
+        "AWS_DEFAULT_REGION": "us-east-1",
+        "AWS_PROFILE": "<replace-with-your-aws-profile>",
+        "PYTHONPATH": "<replace-with-project-folder-path>"
+      },
+      "disabled": false,
+      "autoApprove": []
+    },
+    "awslabs.aws-pricing-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "awslabs.aws-pricing-mcp-server@latest"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR",
+        "AWS_PROFILE": "<replace-with-your-aws-profile>",
+        "AWS_REGION": "us-east-1"
+      },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
