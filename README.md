@@ -1,6 +1,6 @@
 # CFM Tips - Cost Optimization MCP Server
 
-A comprehensive Model Context Protocol (MCP) server for AWS cost analysis and optimization, designed to work seamlessly with Amazon Q CLI and other MCP-compatible clients.
+A comprehensive Model Context Protocol (MCP) server for AWS cost analysis and optimization recommendations, designed to work seamlessly with Amazon Q CLI and other MCP-compatible clients.
 
 ## 🚀 Quick Start
 
