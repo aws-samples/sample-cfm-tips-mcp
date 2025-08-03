@@ -44,7 +44,7 @@ https://github.com/awslabs/mcp/tree/main/src/aws-pricing-mcp-server
 - **Performance Insights** - RDS performance metrics and analysis
 - **CUR Reports** - Cost and Usage Report analysis from S3
 
-### Cost Optimization Runbooks
+### Cost Optimization Playbooks
 - 🔧 **EC2 Right Sizing** - Identify underutilized EC2 instances
 - 💾 **EBS Optimization** - Find unused and underutilized volumes
 - 🗄️ **RDS Optimization** - Identify idle and underutilized databases
@@ -112,7 +112,7 @@ Your AWS credentials need these permissions. Create an IAM policy with these act
 ## 🛠️ Installation
 
 ### Prerequisites
-- Python 3.10 or higher
+- Python 3.11 or higher
 - AWS CLI configured with appropriate credentials
 - Amazon Q CLI (for MCP integration) - https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html
 
