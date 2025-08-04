@@ -4,6 +4,8 @@ Centralized logging configuration for CFM Tips MCP Server
 
 import logging
 import sys
+import os
+import tempfile
 from datetime import datetime
 
 def setup_logging():
@@ -22,23 +24,68 @@ def setup_logging():
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
     
-    # File handler
-    file_handler = logging.FileHandler('cfm_tips_mcp.log')
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(formatter)
-    root_logger.addHandler(file_handler)
-    
-    # Console handler
+    # Always add console handler first (this will always work)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     
-    # Error file handler
-    error_handler = logging.FileHandler('cfm_tips_mcp_errors.log')
-    error_handler.setLevel(logging.ERROR)
-    error_handler.setFormatter(formatter)
-    root_logger.addHandler(error_handler)
+    # Try to add file handlers, but don't fail if we can't write files
+    try:
+        # Try to create logs directory if it doesn't exist
+        log_dir = 'logs'
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+        
+        # Try main log file in logs directory first
+        log_file = os.path.join(log_dir, 'cfm_tips_mcp.log')
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+        
+        # Try error log file
+        error_file = os.path.join(log_dir, 'cfm_tips_mcp_errors.log')
+        error_handler = logging.FileHandler(error_file)
+        error_handler.setLevel(logging.ERROR)
+        error_handler.setFormatter(formatter)
+        root_logger.addHandler(error_handler)
+        
+    except (OSError, PermissionError) as e:
+        # If we can't write to logs directory, try current directory
+        try:
+            file_handler = logging.FileHandler('cfm_tips_mcp.log')
+            file_handler.setLevel(logging.INFO)
+            file_handler.setFormatter(formatter)
+            root_logger.addHandler(file_handler)
+            
+            error_handler = logging.FileHandler('cfm_tips_mcp_errors.log')
+            error_handler.setLevel(logging.ERROR)
+            error_handler.setFormatter(formatter)
+            root_logger.addHandler(error_handler)
+            
+        except (OSError, PermissionError):
+            # If we can't write anywhere, try temp directory
+            try:
+                temp_dir = tempfile.gettempdir()
+                temp_log = os.path.join(temp_dir, 'cfm_tips_mcp.log')
+                file_handler = logging.FileHandler(temp_log)
+                file_handler.setLevel(logging.INFO)
+                file_handler.setFormatter(formatter)
+                root_logger.addHandler(file_handler)
+                
+                temp_error = os.path.join(temp_dir, 'cfm_tips_mcp_errors.log')
+                error_handler = logging.FileHandler(temp_error)
+                error_handler.setLevel(logging.ERROR)
+                error_handler.setFormatter(formatter)
+                root_logger.addHandler(error_handler)
+                
+                # Log where we're writing files
+                print(f"Warning: Using temp directory for logs: {temp_dir}")
+                
+            except (OSError, PermissionError):
+                # If all else fails, just use console logging
+                print("Warning: Could not create log files, using console logging only")
     
     return logging.getLogger(__name__)
 
