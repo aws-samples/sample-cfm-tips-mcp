@@ -60,7 +60,7 @@ https://github.com/awslabs/mcp/tree/main/src/aws-pricing-mcp-server
 ## 📁 Project Structure
 
 ```
-aws_cost_mcp_server/
+sample-cfm-tips-mcp/
 ├── playbooks/                            # CFM Tips optimization playbooks engine
 ├── services/                             # AWS Services as datasources for the cost optimization
 ├── mcp_server_with_runbooks.py           # Main MCP server
