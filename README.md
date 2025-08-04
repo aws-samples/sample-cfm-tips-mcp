@@ -6,9 +6,9 @@ A comprehensive Model Context Protocol (MCP) server for AWS cost analysis and op
 
 ```bash
 # Clone the repository
-git clone git@github.com:aws-samples/sample-cfm-tips-mcp.git
+git clone https://github.com/aws-samples/sample-cfm-tips-mcp.git
 
-cd cfm-tips-mcp
+cd sample-cfm-tips-mcp
 
 # Install dependencies
 pip install -r requirements.txt
