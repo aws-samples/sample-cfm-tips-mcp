@@ -234,7 +234,7 @@ def show_usage_instructions(config_file):
     print("=" * 60)
     
     print("\n🚀 Quick Start:")
-    print(f"   q chat --mcp-config {shlex.quote(os.path.abspath(config_file))}")
+    print(f"   q chat ")
     
     print("\n💬 Example commands in Amazon Q:")
     examples = [
