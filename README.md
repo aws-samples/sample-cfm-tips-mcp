@@ -120,7 +120,7 @@ Your AWS credentials need these permissions. Create an IAM policy with these act
 
 1. **Clone the Repository**
    ```bash
-   git clone git@github.com:aws-samples/sample-cfm-tips-mcp.git
+   git clone https://github.com/aws-samples/sample-cfm-tips-mcp.git
    cd sample-cfm-tips-mcp
    ```
 
