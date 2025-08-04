@@ -15,8 +15,8 @@ from pathlib import Path
 
 def check_python_version():
     """Check if Python version is compatible."""
-    if sys.version_info < (3, 11):
-        print("❌ Python 3.11 or higher is required")
+    if sys.version_info < (3, 8):
+        print("❌ Python 3.8 or higher is required")
         print(f"   Current version: {sys.version}")
         return False
     print(f"✅ Python version: {sys.version.split()[0]}")
@@ -109,25 +109,48 @@ def create_mcp_config():
     print("\n⚙️  Creating MCP configuration...")
     
     current_dir = os.getcwd()
-    config = {
-        "mcpServers": {
-            "cfm-tips": {
-                "command": "python3",
-                "args": ["mcp_server_with_runbooks.py"],
-                "env": {
-                    "AWS_DEFAULT_REGION": "us-east-1",
-                    "PYTHONPATH": "."
-                }
-            }
+    amazonq_dir = Path.home() / ".aws" / "amazonq"
+    config_file = amazonq_dir / "mcp.json"
+    
+    # Create amazonq directory if it doesn't exist
+    amazonq_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Load existing config or create new one
+    existing_config = {}
+    if config_file.exists():
+        try:
+            with open(config_file, 'r', encoding="utf-8") as f:
+                existing_config = json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            existing_config = {}
+    
+    # Ensure mcpServers key exists
+    if "mcpServers" not in existing_config:
+        existing_config["mcpServers"] = {}
+    
+    # Add or update cfm-tips server config
+    existing_config["mcpServers"]["cfm-tips"] = {
+        "command": "python3",
+        "args": [str(Path(current_dir) / "mcp_server_with_runbooks.py")],
+        "env": {
+            "AWS_DEFAULT_REGION": "us-east-1",
+            "AWS_PROFILE": "default",
+            "PYTHONPATH": current_dir
         }
     }
     
-    config_file = "mcp_runbooks.json"
+    # Write updated config
     with open(config_file, 'w', encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
+        json.dump(existing_config, f, indent=2)
     
-    print(f"✅ MCP configuration created: {config_file}")
-    return config_file
+    # Also create local template for reference
+    template_file = "mcp_runbooks.json"
+    with open(template_file, 'w', encoding="utf-8") as f:
+        json.dump(existing_config, f, indent=2)
+    
+    print(f"✅ MCP configuration updated: {config_file}")
+    print(f"✅ Template created: {template_file}")
+    return str(config_file)
 
 def test_server():
     """Test the MCP server."""
@@ -211,7 +234,7 @@ def show_usage_instructions(config_file):
     print("=" * 60)
     
     print("\n🚀 Quick Start:")
-    print(f"   q chat")
+    print(f"   q chat --mcp-config {shlex.quote(os.path.abspath(config_file))}")
     
     print("\n💬 Example commands in Amazon Q:")
     examples = [
@@ -240,6 +263,7 @@ def show_usage_instructions(config_file):
     print("\n📚 Documentation:")
     print("   • README.md - Main documentation")
     print("   • RUNBOOKS_GUIDE.md - Detailed usage guide")
+    print("   • CORRECTED_PERMISSIONS.md - IAM permissions")
     
     print("\n🔍 Troubleshooting:")
     print("   • python3 diagnose_cost_optimization_hub_v2.py")
