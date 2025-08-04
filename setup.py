@@ -15,8 +15,8 @@ from pathlib import Path
 
 def check_python_version():
     """Check if Python version is compatible."""
-    if sys.version_info < (3, 8):
-        print("❌ Python 3.8 or higher is required")
+    if sys.version_info < (3, 11):
+        print("❌ Python 3.11 or higher is required")
         print(f"   Current version: {sys.version}")
         return False
     print(f"✅ Python version: {sys.version.split()[0]}")
@@ -211,7 +211,7 @@ def show_usage_instructions(config_file):
     print("=" * 60)
     
     print("\n🚀 Quick Start:")
-    print(f"   q chat --mcp-config {shlex.quote(os.path.abspath(config_file))}")
+    print(f"   q chat")
     
     print("\n💬 Example commands in Amazon Q:")
     examples = [
@@ -240,7 +240,6 @@ def show_usage_instructions(config_file):
     print("\n📚 Documentation:")
     print("   • README.md - Main documentation")
     print("   • RUNBOOKS_GUIDE.md - Detailed usage guide")
-    print("   • CORRECTED_PERMISSIONS.md - IAM permissions")
     
     print("\n🔍 Troubleshooting:")
     print("   • python3 diagnose_cost_optimization_hub_v2.py")
@@ -284,7 +283,7 @@ def main():
     if aws_ok and test_ok:
         show_usage_instructions(config_file)
         print("\n🎯 Ready to use! Start with:")
-        print(f"   q chat --mcp-config {shlex.quote(os.path.abspath(config_file))}")
+        print(f"   q chat ")
     else:
         print("\n⚠️  Setup completed with warnings. Please address the issues above.")
         if not aws_ok:
