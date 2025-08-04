@@ -75,7 +75,7 @@ sample-cfm-tips-mcp/
 
 ## 🔐 Required AWS Permissions
 
-Your AWS credentials need these permissions. Create an IAM policy with these actions:
+Your AWS credentials need these permissions. The MCP server uses your role to perform actions, hence proceed with least privilege access only. The below creates an IAM policy with for list, read and describe actions only:
 
 ```json
 {
@@ -288,18 +288,4 @@ We welcome contributions! Please see our contributing guidelines:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
-
-- Built using the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
-- Integrates with [Amazon Q CLI](https://aws.amazon.com/q/)
-- Uses AWS APIs for cost analysis and optimization
-
-## TODO 📞 Support
-
-- **Issues**: Report bugs and feature requests on GitHub Issues
-- **Documentation**: Check the guides in this repository
-- **Community**: Join discussions in GitHub Discussions
-
 ---
-
-**CFM Tips** - Making AWS cost optimization accessible to everyone through conversational AI.
