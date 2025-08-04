@@ -23,7 +23,7 @@ This guide shows how to use the AWS Cost Optimization Runbooks with the MCP serv
 
 ### 1. Setup
 ```bash
-cd <replace-with-project-folder>/aws_cost_mcp_server
+cd <replace-with-project-folder>/
 
 # Make sure all files are executable
 chmod +x mcp_server_with_runbooks.py
@@ -71,7 +71,7 @@ Apply the correct IAM policy for Cost Optimization Hub:
 ```
 
 ### 3. Install dependencies
-pip install -r requirements_fixed.txt
+pip install -r requirements.txt
 
 ### 4. Configure AWS credentials
 aws configure
@@ -273,7 +273,7 @@ The tool names have been shortened to fit MCP's 64-character limit:
 1. **Import Error for runbook_functions**
    ```bash
    # Make sure PYTHONPATH is set in mcp_runbooks.json
-   export PYTHONPATH="<replace-with-project-folder>/aws_cost_mcp_server"
+   export PYTHONPATH="<replace-with-project-folder>"
    ```
 
 2. **Cost Optimization Hub Errors**
