@@ -34,7 +34,7 @@ We welcome contributions to the CFM Tips AWS Cost Optimization MCP Server! This 
 
 1. **Fork the repository**
    ```bash
-   git clone git@github.com:aws-samples/sample-cfm-tips-mcp.git
+   git clone https://github.com/aws-samples/sample-cfm-tips-mcp.git
    cd sample-cfm-tips-mcp
    ```
 
@@ -77,7 +77,7 @@ We welcome contributions to the CFM Tips AWS Cost Optimization MCP Server! This 
    python3 -c "from runbook_functions import your_function; print('OK')"
    
    # Test with Amazon Q (if possible)
-   q chat --mcp-config "$(pwd)/mcp_runbooks.json"
+   q chat
    ```
 
 4. **Update documentation**

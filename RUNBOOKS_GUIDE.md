@@ -47,7 +47,7 @@ Apply the correct IAM policy for Cost Optimization Hub:
       "Action": [
         "cost-optimization-hub:ListEnrollmentStatuses",
         "cost-optimization-hub:ListRecommendations",
-        "cost-optimization-hub:GetRecommendation",
+        "cost-optimization-hub:GetRecommendation", 
         "cost-optimization-hub:ListRecommendationSummaries",
         "ce:GetCostAndUsage",
         "ce:GetCostForecast",
@@ -59,6 +59,7 @@ Apply the correct IAM policy for Cost Optimization Hub:
         "rds:DescribeDBInstances",
         "lambda:ListFunctions",
         "cloudwatch:GetMetricStatistics",
+        "s3:ListBucket",
         "s3:ListObjectsV2",
         "support:DescribeTrustedAdvisorChecks",
         "support:DescribeTrustedAdvisorCheckResult",

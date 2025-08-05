@@ -98,6 +98,7 @@ Your AWS credentials need these permissions. The MCP server uses your role to pe
         "rds:DescribeDBInstances",
         "lambda:ListFunctions",
         "cloudwatch:GetMetricStatistics",
+        "s3:ListBucket",
         "s3:ListObjectsV2",
         "support:DescribeTrustedAdvisorChecks",
         "support:DescribeTrustedAdvisorCheckResult",

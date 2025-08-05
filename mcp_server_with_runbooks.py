@@ -23,7 +23,7 @@ Features:
 
 Author: CFM Tips
 License: MIT
-Repository: https://github.com/your-repo/aws_cost_mcp_server.git
+Repository: https://github.com/aws-samples/sample-cfm-tips-mcp
 """
 
 import asyncio
