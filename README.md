@@ -2,38 +2,6 @@
 
 A comprehensive Model Context Protocol (MCP) server for AWS cost analysis and optimization recommendations, designed to work seamlessly with Amazon Q CLI and other MCP-compatible clients.
 
-## 🚀 Quick Start
-
-```bash
-# Clone the repository
-git clone https://github.com/aws-samples/sample-cfm-tips-mcp.git
-
-cd sample-cfm-tips-mcp
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure AWS credentials
-aws configure
-
-# Add the MCP server config to Amazon Q using the mcp_runbooks.json as a template
-vi ~/.aws/amazonq/mcp.json
-
-# Example usage in Q chat:
-"Run comprehensive cost analysis for us-east-1"
-"Find unused EBS volumes costing money"
-"Generate EC2 right-sizing report in markdown"
-```
-
-## 🧩 Add-on MCPs
-Add-on AWS Pricing MCP Server MCP server for accessing real-time AWS pricing information and providing cost analysis capabilities
-https://github.com/awslabs/mcp/tree/main/src/aws-pricing-mcp-server
-
-```bash
-# Example usage with Add-on AWS Pricing MCP Server:
-"Review the CDK by comparing it to the actual spend from my AWS account's stackset. Suggest cost optimization opportunities for the app accordingly"
-```
-
 ## ✅ Features
 
 ### Core AWS Services Integration
@@ -73,9 +41,14 @@ sample-cfm-tips-mcp/
 └── README.md                             # Project ReadMe
 ```
 
-## 🔐 Required AWS Permissions
+## 🔐 Security and Permissions - Least Privileges
 
-Your AWS credentials need these permissions. The MCP server uses your role to perform actions, hence proceed with least privilege access only. The below creates an IAM policy with for list, read and describe actions only:
+The MCP tools require specific AWS permissions to function. 
+-  **Create a read-only IAM role** - Restricts LLM agents from modifying AWS resources. This prevents unintended create, update, or delete actions. 
+-  **Enable CloudTrail** - Tracks API activity across your AWS account for security monitoring. 
+-  **Follow least-privilege principles** - Grant only essential read permissions (Describe*, List*, Get*) for required services.
+
+The below creates an IAM policy with for list, read and describe actions only:
 
 ```json
 {
@@ -113,7 +86,7 @@ Your AWS credentials need these permissions. The MCP server uses your role to pe
 ## 🛠️ Installation
 
 ### Prerequisites
-- Python 3.11 or higher
+- **Python 3.11** or higher
 - AWS CLI configured with appropriate credentials
 - Amazon Q CLI (for MCP integration) - https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html
 
@@ -255,6 +228,15 @@ Your AWS credentials need these permissions. The MCP server uses your role to pe
 - Check the [RUNBOOKS_GUIDE.md](RUNBOOKS_GUIDE.md) for detailed usage instructions
 - Run the diagnostic script: `python3 diagnose_cost_optimization_hub_v2.py`
 - Run integration tests: `python3 test_runbooks.py`
+
+## 🧩 Add-on MCPs
+Add-on AWS Pricing MCP Server MCP server for accessing real-time AWS pricing information and providing cost analysis capabilities
+https://github.com/awslabs/mcp/tree/main/src/aws-pricing-mcp-server
+
+```bash
+# Example usage with Add-on AWS Pricing MCP Server:
+"Review the CDK by comparing it to the actual spend from my AWS account's stackset. Suggest cost optimization opportunities for the app accordingly"
+```
 
 ## 🎯 Key Benefits
 
