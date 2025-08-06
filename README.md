@@ -116,19 +116,28 @@ The below creates an IAM policy with for list, read and describe actions only:
    - Create an IAM policy with the permissions listed above
    - Attach the policy to your IAM user or role
 
-5. **Test the Installation**
+5. **Install the MCP Configurations**
    ```bash
-   python3 test_runbooks.py
+   python3 setup.py
    ```
 
-6. **Start the MCP Server**
-   ```bash
-   python3 mcp_server_with_runbooks.py &
-   ```
-
-7. **Start the Q Chat**
+6. **Usage Option 1: Using the Q CLI Chat**
    ```bash
    q chat
+   Show me cost optimization recommendations
+   ```
+
+7. **Usage Option 2: Integrate with Amazon Q Developer Plugin or Kiro**
+   - Open Amazon Q Developer Plugin on your IDE
+   - Click on Chat -> 🛠️ Configure MCP Servers -> ➕ Add new MCP
+   - Use the following configuration
+   ```bash
+   - Scope: Global
+   - Name: cfm-tips
+   - Transport: stdio
+   - Command: python3
+   - Arguments: <replace-with-path-to-folder>/mcp_server_with_runbooks.py
+   - Timeout: 60
    ```
 
 ## 🔧 Available Tools
