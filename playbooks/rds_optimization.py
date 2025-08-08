@@ -276,7 +276,3 @@ def _calculate_rds_savings(instance_class: str) -> float:
         return 60
     except Exception:
         return 60
-
-if __name__ == '__main__':
-    rds = identify_idle_rds_instances()
-    print(rds)
