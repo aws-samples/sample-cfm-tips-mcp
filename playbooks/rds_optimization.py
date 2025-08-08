@@ -148,14 +148,19 @@ def _get_rds_from_cloudwatch(region: Optional[str], lookback_period_days: int, c
     else:
         rds_client = boto3.client('rds')
         cloudwatch_client = boto3.client('cloudwatch')
-        
-    response = rds_client.describe_db_instances()
+    
+    # Use pagination for RDS instances
+    paginator = rds_client.get_paginator('describe_db_instances')
+    page_iterator = paginator.paginate()
+    
     end_time = datetime.utcnow()
     start_time = end_time - timedelta(days=lookback_period_days)
     underutilized_instances = []
     
-    for db_instance in response['DBInstances']:
-        db_instance_identifier = db_instance['DBInstanceIdentifier']
+    # Process each page of DB instances
+    for page in page_iterator:
+        for db_instance in page['DBInstances']:
+            db_instance_identifier = db_instance['DBInstanceIdentifier']
         
         try:
             cpu_response = cloudwatch_client.get_metric_statistics(
@@ -170,7 +175,7 @@ def _get_rds_from_cloudwatch(region: Optional[str], lookback_period_days: int, c
             
             if cpu_response['Datapoints']:
                 avg_cpu = sum(dp['Average'] for dp in cpu_response['Datapoints']) / len(cpu_response['Datapoints'])
-                
+
                 if avg_cpu < cpu_threshold:
                     underutilized_instances.append({
                         'db_instance_identifier': db_instance_identifier,
@@ -209,39 +214,44 @@ def identify_idle_rds_instances(
             rds_client = boto3.client('rds')
             cloudwatch_client = boto3.client('cloudwatch')
             
-        response = rds_client.describe_db_instances()
+        # Use pagination for RDS instances
+        paginator = rds_client.get_paginator('describe_db_instances')
+        page_iterator = paginator.paginate()
+        
         end_time = datetime.utcnow()
         start_time = end_time - timedelta(days=lookback_period_days)
         
         idle_instances = []
         
-        for db_instance in response['DBInstances']:
-            db_instance_identifier = db_instance['DBInstanceIdentifier']
+        # Process each page of DB instances
+        for page in page_iterator:
+            for db_instance in page['DBInstances']:
+                db_instance_identifier = db_instance['DBInstanceIdentifier']
             
-            try:
-                connection_response = cloudwatch_client.get_metric_statistics(
-                    Namespace='AWS/RDS',
-                    MetricName='DatabaseConnections',
-                    Dimensions=[{'Name': 'DBInstanceIdentifier', 'Value': db_instance_identifier}],
-                    StartTime=start_time,
-                    EndTime=end_time,
-                    Period=86400,
-                    Statistics=['Maximum']
-                )
-                
-                if connection_response['Datapoints']:
-                    max_connections = max(dp['Maximum'] for dp in connection_response['Datapoints'])
+                try:
+                    connection_response = cloudwatch_client.get_metric_statistics(
+                        Namespace='AWS/RDS',
+                        MetricName='DatabaseConnections',
+                        Dimensions=[{'Name': 'DBInstanceIdentifier', 'Value': db_instance_identifier}],
+                        StartTime=start_time,
+                        EndTime=end_time,
+                        Period=86400,
+                        Statistics=['Maximum']
+                    )
                     
-                    if max_connections <= connection_threshold:
-                        idle_instances.append({
-                            'db_instance_identifier': db_instance_identifier,
-                            'db_instance_class': db_instance['DBInstanceClass'],
-                            'max_connections': max_connections
-                        })
+                    if connection_response['Datapoints']:
+                        max_connections = max(dp['Maximum'] for dp in connection_response['Datapoints'])
                         
-            except Exception as e:
-                logger.warning(f"Error getting metrics for {db_instance_identifier}: {str(e)}")
-                continue
+                        if max_connections <= connection_threshold:
+                            idle_instances.append({
+                                'db_instance_identifier': db_instance_identifier,
+                                'db_instance_class': db_instance['DBInstanceClass'],
+                                'max_connections': max_connections
+                            })
+                            
+                except Exception as e:
+                    logger.warning(f"Error getting metrics for {db_instance_identifier}: {str(e)}")
+                    continue
         
         return {
             "status": "success",
@@ -266,3 +276,7 @@ def _calculate_rds_savings(instance_class: str) -> float:
         return 60
     except Exception:
         return 60
+
+if __name__ == '__main__':
+    rds = identify_idle_rds_instances()
+    print(rds)

@@ -6,9 +6,8 @@ This module implements the Lambda Optimization playbook from AWS Cost Optimizati
 
 import logging
 import boto3
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
-from botocore.exceptions import ClientError
 from services.compute_optimizer import get_lambda_recommendations
 from services.trusted_advisor import get_trusted_advisor_checks
 
@@ -131,14 +130,19 @@ def _get_lambda_from_cloudwatch(region: Optional[str], lookback_period_days: int
     else:
         lambda_client = boto3.client('lambda')
         cloudwatch_client = boto3.client('cloudwatch')
-        
-    response = lambda_client.list_functions()
+    
+    # Implement pagination for list_functions
+    analyzed_functions = []
     end_time = datetime.utcnow()
     start_time = end_time - timedelta(days=lookback_period_days)
-    analyzed_functions = []
     
-    for function in response['Functions']:
-        function_name = function['FunctionName']
+    # Use pagination with marker
+    paginator = lambda_client.get_paginator('list_functions')
+    page_iterator = paginator.paginate()
+    
+    for page in page_iterator:
+        for function in page['Functions']:
+            function_name = function['FunctionName']
         
         try:
             # Get invocation metrics
@@ -206,15 +210,19 @@ def identify_unused_lambda_functions(
         else:
             lambda_client = boto3.client('lambda')
             cloudwatch_client = boto3.client('cloudwatch')
-            
-        response = lambda_client.list_functions()
+        
+        # Implement pagination for listing functions
         end_time = datetime.utcnow()
         start_time = end_time - timedelta(days=lookback_period_days)
-        
         unused_functions = []
         
-        for function in response['Functions']:
-            function_name = function['FunctionName']
+        # Use paginator for list_functions
+        paginator = lambda_client.get_paginator('list_functions')
+        page_iterator = paginator.paginate()
+        
+        for page in page_iterator:
+            for function in page['Functions']:
+                function_name = function['FunctionName']
             
             try:
                 invocation_response = cloudwatch_client.get_metric_statistics(
