@@ -6,12 +6,10 @@ It provides functions to identify and recommend right-sizing opportunities for E
 """
 
 import logging
-import json
 import boto3
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from services.compute_optimizer import get_ec2_recommendations
-from services.cost_explorer import get_cost_and_usage
 from services.trusted_advisor import get_trusted_advisor_checks
 
 logger = logging.getLogger(__name__)
@@ -357,6 +355,7 @@ def downsize_instance(
     except Exception as e:
         logger.error(f"Error downsizing instance: {str(e)}")
         return None
+
 def get_stopped_instances(
     region: Optional[str] = None,
     min_stopped_days: int = 7
@@ -367,24 +366,28 @@ def get_stopped_instances(
             ec2_client = boto3.client('ec2', region_name=region)
         else:
             ec2_client = boto3.client('ec2')
-            
-        response = ec2_client.describe_instances(
+        
+        # Use paginator for EC2 describe_instances
+        paginator = ec2_client.get_paginator('describe_instances')
+        page_iterator = paginator.paginate(
             Filters=[{'Name': 'instance-state-name', 'Values': ['stopped']}]
         )
         
         stopped_instances = []
         
-        for reservation in response['Reservations']:
-            for instance in reservation['Instances']:
-                instance_details = {
-                    'instance_id': instance['InstanceId'],
-                    'instance_type': instance['InstanceType'],
-                    'state': instance['State']['Name'],
-                    'launch_time': instance.get('LaunchTime', '').isoformat() if instance.get('LaunchTime') else '',
-                    'tags': {tag['Key']: tag['Value'] for tag in instance.get('Tags', [])},
-                    'recommendation': 'Consider terminating if no longer needed'
-                }
-                stopped_instances.append(instance_details)
+        # Process each page of results
+        for page in page_iterator:
+            for reservation in page['Reservations']:
+                for instance in reservation['Instances']:
+                    instance_details = {
+                        'instance_id': instance['InstanceId'],
+                        'instance_type': instance['InstanceType'],
+                        'state': instance['State']['Name'],
+                        'launch_time': instance.get('LaunchTime', '').isoformat() if instance.get('LaunchTime') else '',
+                        'tags': {tag['Key']: tag['Value'] for tag in instance.get('Tags', [])},
+                        'recommendation': 'Consider terminating if no longer needed'
+                    }
+                    stopped_instances.append(instance_details)
         
         return {
             "status": "success",
@@ -407,21 +410,38 @@ def get_unattached_elastic_ips(
             ec2_client = boto3.client('ec2', region_name=region)
         else:
             ec2_client = boto3.client('ec2')
-            
-        response = ec2_client.describe_addresses()
-        unattached_eips = []
         
-        for address in response['Addresses']:
-            if 'InstanceId' not in address and 'NetworkInterfaceId' not in address:
-                eip_details = {
-                    'allocation_id': address.get('AllocationId', 'unknown'),
-                    'public_ip': address.get('PublicIp', 'unknown'),
-                    'domain': address.get('Domain', 'unknown'),
-                    'tags': {tag['Key']: tag['Value'] for tag in address.get('Tags', [])},
-                    'monthly_cost': 3.65,
-                    'recommendation': 'Release if not needed'
-                }
-                unattached_eips.append(eip_details)
+        # Note: describe_addresses doesn't support pagination via paginator,
+        unattached_eips = []
+        next_token = None
+        
+        while True:
+            # Prepare pagination parameters
+            params = {}
+            if next_token:
+                params['NextToken'] = next_token
+                
+            # Make the API call
+            response = ec2_client.describe_addresses(**params)
+            
+            # Process results
+            for address in response['Addresses']:
+                if 'InstanceId' not in address and 'NetworkInterfaceId' not in address:
+                    eip_details = {
+                        'allocation_id': address.get('AllocationId', 'unknown'),
+                        'public_ip': address.get('PublicIp', 'unknown'),
+                        'domain': address.get('Domain', 'unknown'),
+                        'tags': {tag['Key']: tag['Value'] for tag in address.get('Tags', [])},
+                        'monthly_cost': 3.65,
+                        'recommendation': 'Release if not needed'
+                    }
+                    unattached_eips.append(eip_details)
+            
+            # Check if there are more results
+            if 'NextToken' in response:
+                next_token = response['NextToken']
+            else:
+                break
         
         total_monthly_cost = len(unattached_eips) * 3.65
         

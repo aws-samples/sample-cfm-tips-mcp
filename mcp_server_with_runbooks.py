@@ -601,11 +601,37 @@ async def list_cost_optimization_enrollment_statuses(arguments: Dict[str, Any]) 
         if include_organization_info:
             params['includeOrganizationInfo'] = include_organization_info
             
-        response = client.list_enrollment_statuses(**params)
+        # Initialize variables for pagination
+        all_items = []
+        next_token = None
+
+        # Use pagination to retrieve all results
+        while True:
+            # Add NextToken if we have one from a previous call
+            if next_token:
+                params['nextToken'] = next_token
+
+            # Make the API call
+            response = client.list_enrollment_statuses(**params)
+
+            # Add items from this page to our collection
+            if 'items' in response:
+                all_items.extend(response['items'])
+
+            # Check if there are more pages
+            if 'nextToken' in response:
+                next_token = response['nextToken']
+            else:
+                break
+
+        # Create our final result with all items
         result = {
             "status": "success",
-            "data": response,
-            "message": f"Retrieved {len(response.get('items', []))} enrollment statuses"
+            "data": {
+                "items": all_items,
+                "count": len(all_items)
+            },
+            "message": f"Retrieved {len(all_items)} enrollment statuses"
         }
         return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
         
@@ -638,12 +664,43 @@ async def get_cost_optimization_recommendations(arguments: Dict[str, Any]) -> Li
             params['includeAllRecommendations'] = include_all_recommendations
         if order_by:
             params['orderBy'] = order_by
-            
-        response = client.list_recommendations(**params)
+
+        # Initialize variables for pagination
+        all_items = []
+        next_token = None
+
+        # Use pagination to retrieve all results
+        while True:
+            # Add NextToken if we have one from a previous call
+            if next_token:
+                params['nextToken'] = next_token
+
+            # Make the API call
+            response = client.list_recommendations(**params)
+
+            # Add items from this page to our collection
+            if 'items' in response:
+                all_items.extend(response['items'])
+
+            # Check if there are more pages
+            if 'nextToken' in response:
+                next_token = response['nextToken']
+            else:
+                break
+
+            # If the user requested a specific maximum number of results and we've reached it, stop
+            if max_results is not None and len(all_items) >= max_results:
+                all_items = all_items[:max_results]  # Truncate to exact requested number
+                break
+
+        # Create our final result with all items
         result = {
             "status": "success",
-            "data": response,
-            "message": f"Retrieved {len(response.get('items', []))} cost optimization recommendations"
+            "data": {
+                "items": all_items,
+                "count": len(all_items)
+            },
+            "message": f"Retrieved {len(all_items)} cost optimization recommendations"
         }
         return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
         
@@ -669,15 +726,46 @@ async def get_cost_optimization_recommendation_summaries(arguments: Dict[str, An
         params = {'maxResults': max_results}
         if group_by:
             params['groupBy'] = group_by
-            
-        response = client.list_recommendation_summaries(**params)
+
+        # Initialize variables for pagination
+        all_items = []
+        next_token = None
+
+        # Use pagination to retrieve all results
+        while True:
+            # Add nextToken if we have one from a previous call
+            if next_token:
+                params['nextToken'] = next_token
+
+            # Make the API call
+            response = client.list_recommendation_summaries(**params)
+
+            # Add items from this page to our collection
+            if 'items' in response:
+                all_items.extend(response['items'])
+
+            # Check if there are more pages
+            if 'nextToken' in response:
+                next_token = response['nextToken']
+            else:
+                break
+
+            # If the user requested a specific maximum number of results and we've reached it, stop
+            if max_results is not None and len(all_items) >= max_results:
+                all_items = all_items[:max_results]  # Truncate to exact requested number
+                break
+
+        # Create our final result with all items
         result = {
             "status": "success",
-            "data": response,
-            "message": f"Retrieved {len(response.get('items', []))} recommendation summaries"
+            "data": {
+                "items": all_items,
+                "count": len(all_items)
+            },
+            "message": f"Retrieved {len(all_items)} recommendation summaries"
         }
         return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        
+
     except ClientError as e:
         error_code = e.response['Error']['Code']
         error_message = e.response['Error']['Message']

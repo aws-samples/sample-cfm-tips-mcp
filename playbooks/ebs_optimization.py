@@ -148,47 +148,52 @@ def _get_volumes_from_cloudwatch(region: Optional[str], lookback_period_days: in
     else:
         ec2_client = boto3.client('ec2')
         cloudwatch_client = boto3.client('cloudwatch')
-        
-    response = ec2_client.describe_volumes()
+    
+    # Use paginator for describe_volumes
+    paginator = ec2_client.get_paginator('describe_volumes')
+    page_iterator = paginator.paginate()
+    
     end_time = datetime.utcnow()
     start_time = end_time - timedelta(days=lookback_period_days)
     underutilized_volumes = []
     
-    for volume in response['Volumes']:
-        volume_id = volume['VolumeId']
-        volume_type = volume['VolumeType']
-        volume_size = volume['Size']
-        
-        try:
-            # Get IOPS metrics
-            iops_response = cloudwatch_client.get_metric_statistics(
-                Namespace='AWS/EBS',
-                MetricName='VolumeReadOps',
-                Dimensions=[{'Name': 'VolumeId', 'Value': volume_id}],
-                StartTime=start_time,
-                EndTime=end_time,
-                Period=86400,
-                Statistics=['Sum']
-            )
+    # Process each page of volumes
+    for page in page_iterator:
+        for volume in page['Volumes']:
+            volume_id = volume['VolumeId']
+            volume_type = volume['VolumeType']
+            volume_size = volume['Size']
             
-            if iops_response['Datapoints']:
-                total_ops = sum(dp['Sum'] for dp in iops_response['Datapoints'])
-                avg_iops = total_ops / len(iops_response['Datapoints']) / 86400
+            try:
+                # Get IOPS metrics
+                iops_response = cloudwatch_client.get_metric_statistics(
+                    Namespace='AWS/EBS',
+                    MetricName='VolumeReadOps',
+                    Dimensions=[{'Name': 'VolumeId', 'Value': volume_id}],
+                    StartTime=start_time,
+                    EndTime=end_time,
+                    Period=86400,
+                    Statistics=['Sum']
+                )
                 
-                if avg_iops < iops_threshold:
-                    underutilized_volumes.append({
-                        'volume_id': volume_id,
-                        'volume_type': volume_type,
-                        'volume_size': volume_size,
-                        'avg_iops': round(avg_iops, 2),
-                        'finding': 'Low IOPS Utilization',
-                        'recommendation': {
-                            'action': 'Consider gp3 or smaller size',
-                            'estimated_monthly_savings': volume_size * 0.02  # Rough estimate
-                        }
-                    })
-        except Exception:
-            continue
+                if iops_response['Datapoints']:
+                    total_ops = sum(dp['Sum'] for dp in iops_response['Datapoints'])
+                    avg_iops = total_ops / len(iops_response['Datapoints']) / 86400
+                    
+                    if avg_iops < iops_threshold:
+                        underutilized_volumes.append({
+                            'volume_id': volume_id,
+                            'volume_type': volume_type,
+                            'volume_size': volume_size,
+                            'avg_iops': round(avg_iops, 2),
+                            'finding': 'Low IOPS Utilization',
+                            'recommendation': {
+                                'action': 'Consider gp3 or smaller size',
+                                'estimated_monthly_savings': volume_size * 0.02  # Rough estimate
+                            }
+                        })
+            except Exception:
+                continue
     
     return {
         "status": "success",
@@ -368,24 +373,27 @@ def identify_unused_volumes(
         else:
             ec2_client = boto3.client('ec2')
             
-        # Get unattached volumes
-        response = ec2_client.describe_volumes(
+        # Use paginator for describe_volumes
+        paginator = ec2_client.get_paginator('describe_volumes')
+        page_iterator = paginator.paginate(
             Filters=[{'Name': 'status', 'Values': ['available']}]
         )
         
         cutoff_date = datetime.utcnow() - timedelta(days=min_age_days)
         unused_volumes = []
         
-        for volume in response['Volumes']:
-            create_time = volume['CreateTime'].replace(tzinfo=None)
-            if create_time < cutoff_date:
-                unused_volumes.append({
-                    'volume_id': volume['VolumeId'],
-                    'volume_type': volume['VolumeType'],
-                    'volume_size': volume['Size'],
-                    'age_days': (datetime.utcnow() - create_time).days,
-                    'estimated_monthly_cost': get_volume_price(volume['VolumeType'], volume['Size']) * 730 if get_volume_price(volume['VolumeType'], volume['Size']) else volume['Size'] * 0.10
-                })
+        # Process each page of volumes
+        for page in page_iterator:
+            for volume in page['Volumes']:
+                create_time = volume['CreateTime'].replace(tzinfo=None)
+                if create_time < cutoff_date:
+                    unused_volumes.append({
+                        'volume_id': volume['VolumeId'],
+                        'volume_type': volume['VolumeType'],
+                        'volume_size': volume['Size'],
+                        'age_days': (datetime.utcnow() - create_time).days,
+                        'estimated_monthly_cost': get_volume_price(volume['VolumeType'], volume['Size']) * 730 if get_volume_price(volume['VolumeType'], volume['Size']) else volume['Size'] * 0.10
+                    })
         
         return {
             "status": "success",
