@@ -24,13 +24,7 @@ def setup_logging():
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
     
-    # Always add console handler first (this will always work)
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
-    root_logger.addHandler(console_handler)
-    
-    # Try to add file handlers, but don't fail if we can't write files
+    # Add file handlers
     try:
         # Try to create logs directory if it doesn't exist
         log_dir = 'logs'
@@ -84,8 +78,8 @@ def setup_logging():
                 print(f"Warning: Using temp directory for logs: {temp_dir}")
                 
             except (OSError, PermissionError):
-                # If all else fails, just use console logging
-                print("Warning: Could not create log files, using console logging only")
+                # If all else fails, raise error since we need file logging
+                raise RuntimeError("Could not create log files in any location")
     
     return logging.getLogger(__name__)
 
