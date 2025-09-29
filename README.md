@@ -10,13 +10,13 @@ A comprehensive Model Context Protocol (MCP) server for AWS cost analysis and op
 - **Compute Optimizer** - Right-sizing recommendations for compute resources
 - **Trusted Advisor** - Cost optimization checks and recommendations
 - **Performance Insights** - RDS performance metrics and analysis
-- **CUR Reports** - Cost and Usage Report analysis from S3
 
 ### Cost Optimization Playbooks
 - 🔧 **EC2 Right Sizing** - Identify underutilized EC2 instances
 - 💾 **EBS Optimization** - Find unused and underutilized volumes
 - 🗄️ **RDS Optimization** - Identify idle and underutilized databases
 - ⚡ **Lambda Optimization** - Find overprovisioned and unused functions
+-  � ***CloudTrail Optimization** - Analyze and optimize CloudTrail configurations
 - 📊 **Comprehensive Analysis** - Multi-service cost analysis
 
 ### Advanced Features
@@ -75,7 +75,11 @@ The below creates an IAM policy with for list, read and describe actions only:
         "s3:ListObjectsV2",
         "support:DescribeTrustedAdvisorChecks",
         "support:DescribeTrustedAdvisorCheckResult",
-        "pi:GetResourceMetrics"
+        "pi:GetResourceMetrics",
+        "cloudtrail:DescribeTrails",
+        "cloudtrail:GetTrailStatus",
+        "cloudtrail:GetEventSelectors"
+
       ],
       "Resource": "*"
     }
@@ -172,7 +176,6 @@ The below creates an IAM policy with for list, read and describe actions only:
 - `comprehensive_analysis` - Multi-service cost analysis
 
 ### Additional Tools
-- `list_cur_reports` - List Cost and Usage Reports in S3
 - `get_trusted_advisor_checks` - Get Trusted Advisor recommendations
 - `get_performance_insights_metrics` - Get RDS Performance Insights data
 
