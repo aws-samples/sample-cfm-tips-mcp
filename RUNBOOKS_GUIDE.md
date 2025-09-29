@@ -10,13 +10,13 @@ This guide shows how to use the AWS Cost Optimization Runbooks with the MCP serv
 - ✅ **Compute Optimizer** - Get right-sizing recommendations
 - ✅ **Trusted Advisor** - Cost optimization checks
 - ✅ **Performance Insights** - RDS performance metrics
-- ✅ **CUR Reports** - Cost and Usage Report analysis
 
 ### Cost Optimization Runbooks
 - 🔧 **EC2 Right Sizing** - Identify underutilized EC2 instances
 - 💾 **EBS Optimization** - Find unused and underutilized volumes
 - 🗄️ **RDS Optimization** - Identify idle and underutilized databases
 - ⚡ **Lambda Optimization** - Find overprovisioned and unused functions
+- 📋 **CloudTrail Optimization** - Identify duplicate management event trails
 - 📊 **Comprehensive Analysis** - Multi-service cost analysis
 
 ## Quick Start
@@ -63,7 +63,10 @@ Apply the correct IAM policy for Cost Optimization Hub:
         "s3:ListObjectsV2",
         "support:DescribeTrustedAdvisorChecks",
         "support:DescribeTrustedAdvisorCheckResult",
-        "pi:GetResourceMetrics"
+        "pi:GetResourceMetrics",
+        "cloudtrail:DescribeTrails",
+        "cloudtrail:GetTrailStatus",
+        "cloudtrail:GetEventSelectors"
       ],
       "Resource": "*"
     }
@@ -72,7 +75,7 @@ Apply the correct IAM policy for Cost Optimization Hub:
 ```
 
 ### 3. Install dependencies
-pip install -r requirements.txt
+pip install -r requirements_fixed.txt
 
 ### 4. Configure AWS credentials
 aws configure
@@ -183,6 +186,39 @@ Generate comprehensive Lambda optimization report.
 "Generate a Lambda optimization report for us-east-1"
 ```
 
+### CloudTrail Optimization Runbooks
+
+#### 1. `get_management_trails`
+Get CloudTrail trails that have management events enabled.
+
+**Example Usage:**
+```
+"Show me all CloudTrail trails with management events enabled in us-east-1"
+```
+
+#### 2. `run_cloudtrail_trails_analysis`
+Analyze CloudTrail trails to identify duplicate management event trails.
+
+**Example Usage:**
+```
+"Analyze CloudTrail trails in us-east-1 for cost optimization opportunities"
+```
+
+**Parameters:**
+- `region`: AWS region to analyze
+
+#### 3. `generate_cloudtrail_report`
+Generate comprehensive CloudTrail optimization report.
+
+**Example Usage:**
+```
+"Generate a CloudTrail optimization report for us-east-1 in markdown format"
+```
+
+**Parameters:**
+- `region`: AWS region to analyze
+- `format`: "json" or "markdown" (default: "json")
+
 ### Comprehensive Analysis
 
 #### `comprehensive_analysis`
@@ -262,6 +298,9 @@ The tool names have been shortened to fit MCP's 64-character limit:
 | `Identify unused Lambda functions` | `lambda_unused` |
 | `Generate Lambda optimization report` | `lambda_report` |
 | `Run comprehensive cost analysis` | `comprehensive_analysis` |
+| `Get CloudTrail management trails` | `get_management_trails` |
+| `Run CloudTrail trails analysis` | `run_cloudtrail_trails_analysis` |
+| `Generate CloudTrail optimization report` | `generate_cloudtrail_report` |
 | `List Cost Optimization Hub enrollment statuses` | `list_coh_enrollment` |
 | `Get Cost Optimization Hub recommendations` | `get_coh_recommendations` |
 | `Get Cost Optimization Hub recommendation summaries` | `get_coh_summaries` |
