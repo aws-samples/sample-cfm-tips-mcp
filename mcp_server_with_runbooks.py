@@ -7,7 +7,6 @@ This server provides tools for analyzing AWS costs and optimizations by connecti
 - AWS Cost Explorer
 - Cost Optimization Hub (with correct permissions)
 - Compute Optimizer
-- CUR Reports in S3
 - Trusted Advisor
 - Performance Insights
 - Cost Optimization Runbooks/Playbooks
@@ -405,12 +404,12 @@ async def list_tools() -> List[Tool]:
         # Comprehensive Runbook Tools
         Tool(
             name="comprehensive_analysis",
-            description="Run comprehensive cost analysis across all services (EC2, EBS, RDS, Lambda)",
+            description="Run comprehensive cost analysis across all services (EC2, EBS, RDS, Lambda, CloudTrail)",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "region": {"type": "string", "description": "AWS region to analyze"},
-                    "services": {"type": "array", "items": {"type": "string"}, "default": ["ec2", "ebs", "rds", "lambda"]},
+                    "services": {"type": "array", "items": {"type": "string"}, "default": ["ec2", "ebs", "rds", "lambda", "cloudtrail"]},
                     "lookback_period_days": {"type": "integer", "default": 14},
                     "output_format": {"type": "string", "enum": ["json", "markdown"], "default": "json"}
                 }
@@ -418,18 +417,6 @@ async def list_tools() -> List[Tool]:
         ),
         
         # Other Tools
-        Tool(
-            name="list_cur_reports",
-            description="List Cost and Usage Reports (CUR) in an S3 bucket",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "bucket_name": {"type": "string"},
-                    "prefix": {"type": "string"}
-                },
-                "required": ["bucket_name"]
-            }
-        ),
         Tool(
             name="get_trusted_advisor_checks",
             description="Get AWS Trusted Advisor check results",
@@ -451,6 +438,39 @@ async def list_tools() -> List[Tool]:
                     "end_time": {"type": "string"}
                 },
                 "required": ["db_instance_identifier"]
+            }
+        ),
+        
+        # CloudTrail Optimization Tools
+        Tool(
+            name="get_management_trails",
+            description="Get CloudTrail management trails",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "region": {"type": "string", "description": "AWS region to analyze"}
+                }
+            }
+        ),
+        Tool(
+            name="run_cloudtrail_trails_analysis",
+            description="Run CloudTrail trails analysis for optimization",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "region": {"type": "string", "description": "AWS region to analyze"}
+                }
+            }
+        ),
+        Tool(
+            name="generate_cloudtrail_report",
+            description="Generate CloudTrail optimization report",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "region": {"type": "string", "description": "AWS region to analyze"},
+                    "output_format": {"type": "string", "enum": ["json", "markdown"], "default": "json"}
+                }
             }
         )
     ]
@@ -482,8 +502,6 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             return await get_cost_optimization_recommendation(arguments)
         elif name == "get_compute_optimizer_recommendations":
             return await get_compute_optimizer_recommendations(arguments)
-        elif name == "list_cur_reports":
-            return await list_cur_reports(arguments)
         elif name == "get_trusted_advisor_checks":
             return await get_trusted_advisor_checks(arguments)
         elif name == "get_performance_insights_metrics":
@@ -546,6 +564,14 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         # Comprehensive Analysis
         elif name == "comprehensive_analysis":
             return await run_comprehensive_cost_analysis(arguments)
+        
+        # CloudTrail Tools
+        elif name == "get_management_trails":
+            return await get_management_trails(arguments)
+        elif name == "run_cloudtrail_trails_analysis":
+            return await run_cloudtrail_trails_analysis(arguments)
+        elif name == "generate_cloudtrail_report":
+            return await generate_cloudtrail_report(arguments)
         
         else:
             logger.warning(f"Unknown tool requested: {name}")
@@ -852,7 +878,10 @@ from runbook_functions import (
     run_lambda_optimization_analysis,
     identify_unused_lambda_functions,
     generate_lambda_optimization_report,
-    run_comprehensive_cost_analysis
+    run_comprehensive_cost_analysis,
+    get_management_trails,
+    run_cloudtrail_trails_analysis,
+    generate_cloudtrail_report
 )
 from runbook_functions_extended import (
     identify_graviton_compatible_instances,
@@ -866,42 +895,6 @@ from runbook_functions_extended import (
 )
 
 # Additional AWS service functions
-async def list_cur_reports(arguments: Dict[str, Any]) -> List[TextContent]:
-    """List Cost and Usage Reports (CUR) in an S3 bucket."""
-    try:
-        bucket_name = arguments["bucket_name"]
-        prefix = arguments.get("prefix")
-        
-        s3_client = boto3.client('s3')
-        params = {'Bucket': bucket_name}
-        if prefix:
-            params['Prefix'] = prefix
-            
-        response = s3_client.list_objects_v2(**params)
-        
-        reports = []
-        if 'Contents' in response:
-            for obj in response['Contents']:
-                reports.append({
-                    'key': obj['Key'],
-                    'size': obj['Size'],
-                    'last_modified': obj['LastModified'].isoformat()
-                })
-                
-        result = {
-            "status": "success",
-            "data": {"reports": reports, "count": len(reports)},
-            "message": f"Found {len(reports)} CUR reports in bucket {bucket_name}"
-        }
-        
-        return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-        
-    except ClientError as e:
-        error_msg = f"AWS API Error: {e.response['Error']['Code']} - {e.response['Error']['Message']}"
-        return [TextContent(type="text", text=f"Error: {error_msg}")]
-    except Exception as e:
-        return [TextContent(type="text", text=f"Error: {str(e)}")]
-
 async def get_trusted_advisor_checks(arguments: Dict[str, Any]) -> List[TextContent]:
     """Get AWS Trusted Advisor check results."""
     try:

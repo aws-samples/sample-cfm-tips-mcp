@@ -263,7 +263,7 @@ async def run_comprehensive_cost_analysis(arguments: Dict[str, Any]) -> List[Tex
     """Run comprehensive cost analysis across all services."""
     try:
         region = arguments.get("region")
-        services = arguments.get("services", ["ec2", "ebs", "rds", "lambda"])
+        services = arguments.get("services", ["ec2", "ebs", "rds", "lambda", "cloudtrail"])
         lookback_period_days = arguments.get("lookback_period_days", 14)
         
         comprehensive_report = {
@@ -312,6 +312,13 @@ async def run_comprehensive_cost_analysis(arguments: Dict[str, Any]) -> List[Tex
             except Exception as e:
                 comprehensive_report["analyses"]["lambda"] = {"error": str(e)}
         
+        if "cloudtrail" in services:
+            try:
+                from playbooks.cloudtrail_optimization import run_cloudtrail_optimization
+                comprehensive_report["analyses"]["cloudtrail"] = run_cloudtrail_optimization(region=region)
+            except Exception as e:
+                comprehensive_report["analyses"]["cloudtrail"] = {"error": str(e)}
+        
         return [TextContent(type="text", text=json.dumps(comprehensive_report, indent=2, default=str))]
         
     except Exception as e:
@@ -356,5 +363,36 @@ async def identify_instances_without_monitoring(arguments: Dict[str, Any]) -> Li
             region=arguments.get("region")
         )
         return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+# CloudTrail optimization functions
+async def get_management_trails(arguments: Dict[str, Any]) -> List[TextContent]:
+    """Get CloudTrail management trails."""
+    try:
+        from playbooks.cloudtrail_optimization import get_management_trails as get_trails
+        result = get_trails(region=arguments.get("region", "us-east-1"))
+        return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def run_cloudtrail_trails_analysis(arguments: Dict[str, Any]) -> List[TextContent]:
+    """Run CloudTrail trails analysis."""
+    try:
+        from playbooks.cloudtrail_optimization import run_cloudtrail_optimization as analyze_trails
+        result = analyze_trails(region=arguments.get("region", "us-east-1"))
+        return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error: {str(e)}")]
+
+async def generate_cloudtrail_report(arguments: Dict[str, Any]) -> List[TextContent]:
+    """Generate CloudTrail optimization report."""
+    try:
+        from playbooks.cloudtrail_optimization import generate_cloudtrail_report as gen_report
+        result = gen_report(
+            region=arguments.get("region", "us-east-1"),
+            output_format=arguments.get("output_format", "json")
+        )
+        return [TextContent(type="text", text=json.dumps(result, indent=2, default=str) if isinstance(result, dict) else result)]
     except Exception as e:
         return [TextContent(type="text", text=f"Error: {str(e)}")]

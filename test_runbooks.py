@@ -38,7 +38,10 @@ def test_imports():
             run_lambda_optimization_analysis,
             identify_unused_lambda_functions,
             generate_lambda_optimization_report,
-            run_comprehensive_cost_analysis
+            run_comprehensive_cost_analysis,
+            get_management_trails,
+            run_cloudtrail_trails_analysis,
+            generate_cloudtrail_report
         )
         print("✅ Runbook functions import successful")
         
@@ -79,7 +82,53 @@ def test_server_creation():
         print(f"❌ Server creation error: {str(e)}")
         return False
 
-
+def test_cloudtrail_functions():
+    """Test CloudTrail optimization functions."""
+    print("\nTesting CloudTrail functions...")
+    
+    try:
+        from runbook_functions import (
+            get_management_trails,
+            run_cloudtrail_trails_analysis,
+            generate_cloudtrail_report
+        )
+        print("✅ CloudTrail functions imported successfully")
+        
+        # Test function signatures
+        import inspect
+        
+        # Check get_management_trails
+        sig = inspect.signature(get_management_trails)
+        if 'arguments' in sig.parameters:
+            print("✅ get_management_trails has correct signature")
+        else:
+            print("❌ get_management_trails signature incorrect")
+            return False
+            
+        # Check run_cloudtrail_trails_analysis
+        sig = inspect.signature(run_cloudtrail_trails_analysis)
+        if 'arguments' in sig.parameters:
+            print("✅ run_cloudtrail_trails_analysis has correct signature")
+        else:
+            print("❌ run_cloudtrail_trails_analysis signature incorrect")
+            return False
+            
+        # Check generate_cloudtrail_report
+        sig = inspect.signature(generate_cloudtrail_report)
+        if 'arguments' in sig.parameters:
+            print("✅ generate_cloudtrail_report has correct signature")
+        else:
+            print("❌ generate_cloudtrail_report signature incorrect")
+            return False
+            
+        return True
+        
+    except ImportError as e:
+        print(f"❌ CloudTrail import error: {e}")
+        return False
+    except Exception as e:
+        print(f"❌ CloudTrail test error: {e}")
+        return False
 
 def test_tool_names():
     """Test that tool names are within MCP limits."""
@@ -92,7 +141,8 @@ def test_tool_names():
         "rds_idle",
         "lambda_unused",
         "comprehensive_analysis",
-        "get_coh_recommendations"
+        "get_coh_recommendations",
+        "cloudtrail_optimization"
     ]
     
     max_length = 0
@@ -114,7 +164,7 @@ def main():
     print("=" * 65)
     
     tests_passed = 0
-    total_tests = 3
+    total_tests = 4
     
     # Test imports
     if test_imports():
@@ -122,6 +172,10 @@ def main():
     
     # Test server creation
     if test_server_creation():
+        tests_passed += 1
+    
+    # Test CloudTrail functions
+    if test_cloudtrail_functions():
         tests_passed += 1
     
     # Test tool names
