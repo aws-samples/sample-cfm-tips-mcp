@@ -209,7 +209,8 @@ def test_server():
             try:
                 # Just check if we can import the main components
                 import mcp_server_with_runbooks
-                import runbook_functions
+                # runbook_functions is deprecated - functions are now in playbooks
+                from playbooks.ec2.ec2_optimization import run_ec2_right_sizing_analysis
                 
                 print("✅ Basic server validation passed")
                 return True

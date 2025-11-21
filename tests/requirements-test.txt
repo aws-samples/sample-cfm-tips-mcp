@@ -1,0 +1,38 @@
+# Testing dependencies for S3 optimization system
+
+# Core testing framework
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+pytest-timeout>=2.1.0
+
+# AWS mocking
+moto[s3,cloudwatch,ce,s3control]>=4.2.0
+boto3>=1.28.0
+botocore>=1.31.0
+
+# Performance testing
+pytest-benchmark>=4.0.0
+memory-profiler>=0.60.0
+
+# Parallel testing (optional)
+pytest-xdist>=3.0.0
+
+# Test reporting
+pytest-html>=3.1.0
+pytest-json-report>=1.5.0
+
+# Code quality
+flake8>=5.0.0
+black>=22.0.0
+isort>=5.10.0
+
+# Type checking
+mypy>=1.0.0
+types-boto3>=1.0.0
+
+# Additional utilities
+freezegun>=1.2.0  # For time-based testing
+responses>=0.23.0  # For HTTP mocking
+factory-boy>=3.2.0  # For test data generation

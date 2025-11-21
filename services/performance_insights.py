@@ -10,6 +10,9 @@ import boto3
 from datetime import datetime, timedelta
 from botocore.exceptions import ClientError
 
+from utils.error_handler import AWSErrorHandler, ResponseFormatter
+from utils.aws_client_factory import get_performance_insights_client
+
 logger = logging.getLogger(__name__)
 
 def get_performance_insights_metrics(
@@ -32,10 +35,7 @@ def get_performance_insights_metrics(
     """
     try:
         # Create Performance Insights client
-        if region:
-            pi_client = boto3.client('pi', region_name=region)
-        else:
-            pi_client = boto3.client('pi')
+        pi_client = get_performance_insights_client(region)
             
         # Set default time range if not provided
         if not start_time:
@@ -69,12 +69,29 @@ def get_performance_insights_metrics(
         }
         
     except ClientError as e:
-        logger.error(f"Error in Performance Insights API: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Performance Insights API error: {str(e)}",
-            "error_code": e.response['Error']['Code'] if 'Error' in e.response else "Unknown"
-        }
+        error_code = e.response['Error']['Code'] if 'Error' in e.response else "Unknown"
+        
+        # Handle specific authorization errors gracefully
+        if error_code in ['NotAuthorizedException', 'AccessDenied', 'UnauthorizedOperation']:
+            logger.warning(f"Performance Insights not authorized for {db_instance_identifier}: {str(e)}")
+            return {
+                "status": "success",
+                "data": {
+                    "MetricList": [],
+                    "AlignedStartTime": start_time,
+                    "AlignedEndTime": end_time,
+                    "Identifier": db_instance_identifier
+                },
+                "message": f"Performance Insights not enabled or authorized for {db_instance_identifier}",
+                "warning": "Performance Insights requires explicit enablement and permissions"
+            }
+        else:
+            logger.error(f"Error in Performance Insights API: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Performance Insights API error: {str(e)}",
+                "error_code": error_code
+            }
         
     except Exception as e:
         logger.error(f"Unexpected error in Performance Insights service: {str(e)}")

@@ -27,11 +27,10 @@ cd <replace-with-project-folder>/
 
 # Make sure all files are executable
 chmod +x mcp_server_with_runbooks.py
-chmod +x runbook_functions.py
 
 # Test the server
 python3 -m py_compile mcp_server_with_runbooks.py
-python3 -m py_compile runbook_functions.py
+python3 -c "from playbooks.ec2.ec2_optimization import run_ec2_right_sizing_analysis; print('Playbooks OK')"
 ```
 
 ### 2. Configure AWS Permissions
@@ -310,7 +309,7 @@ The tool names have been shortened to fit MCP's 64-character limit:
 
 ### Common Issues
 
-1. **Import Error for runbook_functions**
+1. **Import Error for playbook functions**
    ```bash
    # Make sure PYTHONPATH is set in mcp_runbooks.json
    export PYTHONPATH="<replace-with-project-folder>"

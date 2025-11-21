@@ -9,6 +9,9 @@ from typing import Dict, List, Optional, Any
 import boto3
 from botocore.exceptions import ClientError
 
+from utils.error_handler import AWSErrorHandler, ResponseFormatter
+from utils.aws_client_factory import get_trusted_advisor_client
+
 logger = logging.getLogger(__name__)
 
 def get_trusted_advisor_checks(
@@ -27,7 +30,7 @@ def get_trusted_advisor_checks(
     """
     try:
         # Trusted Advisor is only available in us-east-1
-        support_client = boto3.client('support', region_name='us-east-1')
+        support_client = get_trusted_advisor_client()
         
         # Get available checks
         checks_response = support_client.describe_trusted_advisor_checks(language='en')
@@ -40,38 +43,50 @@ def get_trusted_advisor_checks(
         # Get results for each check
         results = []
         for check in checks:
-            check_id = check['id']
+            # Ensure check is a dictionary
+            if not isinstance(check, dict):
+                logger.warning(f"Unexpected check format in Trusted Advisor response: {type(check)}")
+                continue
+                
+            check_id = check.get('id')
+            check_name = check.get('name', 'Unknown')
+            
+            if not check_id:
+                logger.warning(f"Check missing ID: {check_name}")
+                continue
+                
             try:
                 result = support_client.describe_trusted_advisor_check_result(
                     checkId=check_id,
                     language='en'
                 )
-                results.append({
-                    'check_id': check_id,
-                    'name': check['name'],
-                    'category': check['category'],
-                    'result': result['result']
-                })
-            except Exception as check_error:
-                logger.warning(f"Error getting result for check {check['name']}: {str(check_error)}")
                 
-        return {
-            "status": "success",
-            "data": {"checks": results, "count": len(results)},
-            "message": f"Retrieved {len(results)} Trusted Advisor check results"
-        }
+                # Validate result structure
+                if 'result' in result and isinstance(result['result'], dict):
+                    results.append({
+                        'check_id': check_id,
+                        'name': check_name,
+                        'category': check.get('category', 'unknown'),
+                        'result': result['result']
+                    })
+                else:
+                    logger.warning(f"Invalid result structure for check {check_name}")
+                    
+            except Exception as check_error:
+                logger.warning(f"Error getting result for check {check_name}: {str(check_error)}")
+                
+        return ResponseFormatter.success_response(
+            data={"checks": results, "count": len(results)},
+            message=f"Retrieved {len(results)} Trusted Advisor check results",
+            analysis_type="trusted_advisor_checks"
+        )
         
     except ClientError as e:
-        logger.error(f"Error in Trusted Advisor API: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Trusted Advisor API error: {str(e)}",
-            "error_code": e.response['Error']['Code'] if 'Error' in e.response else "Unknown"
-        }
+        return AWSErrorHandler.format_client_error(
+            e, 
+            "get_trusted_advisor_checks",
+            ["support:DescribeTrustedAdvisorChecks", "support:DescribeTrustedAdvisorCheckResult"]
+        )
         
     except Exception as e:
-        logger.error(f"Unexpected error in Trusted Advisor service: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Unexpected error: {str(e)}"
-        }
+        return AWSErrorHandler.format_general_error(e, "get_trusted_advisor_checks")
