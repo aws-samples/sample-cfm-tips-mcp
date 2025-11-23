@@ -16,7 +16,9 @@ A comprehensive Model Context Protocol (MCP) server for AWS cost analysis and op
 - 💾 **EBS Optimization** - Find unused and underutilized volumes
 - 🗄️ **RDS Optimization** - Identify idle and underutilized databases
 - ⚡ **Lambda Optimization** - Find overprovisioned and unused functions
--  � ***CloudTrail Optimization** - Analyze and optimize CloudTrail configurations
+- 🪣 **S3 Optimization** - Comprehensive S3 cost analysis and storage class optimization
+- 📊 **CloudWatch Optimization** - Analyze logs, metrics, alarms, and dashboards for cost efficiency
+- 📋 **CloudTrail Optimization** - Analyze and optimize CloudTrail configurations
 - 📊 **Comprehensive Analysis** - Multi-service cost analysis
 
 ### Advanced Features
@@ -30,12 +32,23 @@ A comprehensive Model Context Protocol (MCP) server for AWS cost analysis and op
 ```
 sample-cfm-tips-mcp/
 ├── playbooks/                            # CFM Tips optimization playbooks engine
+│   ├── s3_optimization.py               # S3 cost optimization playbook
+│   ├── ec2_optimization.py              # EC2 right-sizing playbook
+│   ├── ebs_optimization.py              # EBS volume optimization playbook
+│   ├── rds_optimization.py              # RDS database optimization playbook
+│   ├── lambda_optimization.py           # Lambda function optimization playbook
+│   ├── cloudwatch_optimization.py       # CloudWatch optimization playbook
+│   └── cloudtrail_optimization.py       # CloudTrail optimization playbook
 ├── services/                             # AWS Services as datasources for the cost optimization
+│   ├── s3_service.py                    # S3 API interactions and metrics
+│   ├── s3_pricing.py                    # S3 pricing calculations and cost modeling
+│   ├── cost_explorer.py                 # Cost Explorer API integration
+│   ├── compute_optimizer.py             # Compute Optimizer API integration
+│   └── optimization_hub.py              # Cost Optimization Hub integration
 ├── mcp_server_with_runbooks.py           # Main MCP server
-├── runbook_functions.py                  # Cost optimization runbook implementations
 ├── mcp_runbooks.json                     # Template file for MCP configuration file
 ├── requirements.txt                      # Python dependencies
-├── test_runbooks.py                      # Integration tests
+├── test/                                 # Integration tests
 ├── diagnose_cost_optimization_hub_v2.py  # Diagnostic utilities
 ├── RUNBOOKS_GUIDE.md                     # Detailed usage guide
 └── README.md                             # Project ReadMe
@@ -73,13 +86,22 @@ The below creates an IAM policy with for list, read and describe actions only:
         "cloudwatch:GetMetricStatistics",
         "s3:ListBucket",
         "s3:ListObjectsV2",
+        "s3:GetBucketLocation",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketLifecycleConfiguration",
+        "s3:GetBucketNotification",
+        "s3:GetBucketTagging",
+        "s3:ListMultipartUploads",
+        "s3:GetStorageLensConfiguration",
         "support:DescribeTrustedAdvisorChecks",
         "support:DescribeTrustedAdvisorCheckResult",
         "pi:GetResourceMetrics",
         "cloudtrail:DescribeTrails",
         "cloudtrail:GetTrailStatus",
-        "cloudtrail:GetEventSelectors"
-
+        "cloudtrail:GetEventSelectors",
+        "pricing:GetProducts",
+        "pricing:DescribeServices",
+        "pricing:GetAttributeValues"
       ],
       "Resource": "*"
     }
@@ -172,6 +194,29 @@ The below creates an IAM policy with for list, read and describe actions only:
 - `lambda_unused` - Identify unused Lambda functions
 - `lambda_report` - Generate Lambda optimization reports
 
+### S3 Optimization
+- `s3_general_spend_analysis` - Analyze overall S3 spending patterns and usage
+- `s3_storage_class_selection` - Get guidance on choosing cost-effective storage classes
+- `s3_storage_class_validation` - Validate existing data storage class appropriateness
+- `s3_archive_optimization` - Identify and optimize long-term archive data storage
+- `s3_api_cost_minimization` - Minimize S3 API request charges through optimization
+- `s3_multipart_cleanup` - Identify and clean up incomplete multipart uploads
+- `s3_governance_check` - Implement S3 cost controls and governance compliance
+- `s3_comprehensive_analysis` - Run comprehensive S3 cost optimization analysis
+
+### CloudWatch Optimization
+- `cloudwatch_general_spend_analysis` - Analyze CloudWatch cost breakdown across logs, metrics, alarms, and dashboards
+- `cloudwatch_metrics_optimization` - Identify custom metrics cost optimization opportunities
+- `cloudwatch_logs_optimization` - Analyze log retention and ingestion cost optimization
+- `cloudwatch_alarms_and_dashboards_optimization` - Identify monitoring efficiency improvements
+- `cloudwatch_comprehensive_optimization_tool` - Run comprehensive CloudWatch optimization with intelligent orchestration
+- `get_cloudwatch_cost_estimate` - Get detailed cost estimate for CloudWatch optimization analysis
+
+### CloudTrail Optimization
+- `get_management_trails` - Get CloudTrail management trails
+- `run_cloudtrail_trails_analysis` - Run CloudTrail trails analysis for optimization
+- `generate_cloudtrail_report` - Generate CloudTrail optimization reports
+
 ### Comprehensive Analysis
 - `comprehensive_analysis` - Multi-service cost analysis
 
@@ -194,6 +239,11 @@ The below creates an IAM policy with for list, read and describe actions only:
 "Show me unused EBS volumes that I can delete"
 "Identify idle RDS databases"
 "Find unused Lambda functions"
+"Analyze my S3 storage costs and recommend optimizations"
+"Find incomplete multipart uploads in my S3 buckets"
+"Recommend the best S3 storage class for my data"
+"Analyze my CloudWatch logs and metrics for cost optimization"
+"Show me CloudWatch alarms that can be optimized"
 ```
 
 ### Report Generation
@@ -208,6 +258,8 @@ The below creates an IAM policy with for list, read and describe actions only:
 "Run comprehensive cost analysis for all services in us-east-1"
 "Analyze my AWS infrastructure for cost optimization opportunities"
 "Show me immediate cost savings opportunities"
+"Generate a comprehensive S3 optimization report"
+"Analyze my S3 spending patterns and storage class efficiency"
 ```
 
 ## 🔍 Troubleshooting
@@ -250,24 +302,57 @@ https://github.com/awslabs/mcp/tree/main/src/aws-pricing-mcp-server
 "Review the CDK by comparing it to the actual spend from my AWS account's stackset. Suggest cost optimization opportunities for the app accordingly"
 ```
 
+## 🪣 S3 Optimization Features
+
+The S3 optimization module provides comprehensive cost analysis and optimization recommendations:
+
+### Storage Class Optimization
+- **Intelligent Storage Class Selection** - Get recommendations for the most cost-effective storage class based on access patterns
+- **Storage Class Validation** - Analyze existing data to ensure optimal storage class usage
+- **Cost Breakeven Analysis** - Calculate when to transition between storage classes
+- **Archive Optimization** - Identify long-term data suitable for Glacier or Deep Archive
+
+### Cost Analysis & Monitoring
+- **General Spend Analysis** - Comprehensive S3 spending pattern analysis over 12 months
+- **Bucket-Level Cost Ranking** - Identify highest-cost buckets and optimization opportunities
+- **Usage Type Breakdown** - Analyze costs by storage, requests, and data transfer
+- **Regional Cost Distribution** - Understand spending across AWS regions
+
+### Operational Optimization
+- **Multipart Upload Cleanup** - Identify and eliminate incomplete multipart uploads
+- **API Cost Minimization** - Optimize request patterns to reduce API charges
+- **Governance Compliance** - Implement cost controls and policy compliance checking
+- **Lifecycle Policy Recommendations** - Automated suggestions for lifecycle transitions
+
+### Advanced Analytics
+- **Real-Time Pricing Integration** - Uses AWS Price List API for accurate cost calculations
+- **Trend Analysis** - Identify spending growth patterns and anomalies
+- **Efficiency Metrics** - Calculate cost per GB and storage efficiency ratios
+- **Comprehensive Reporting** - Generate detailed optimization reports in JSON or Markdown
+
 ## 🎯 Key Benefits
 
 - **Immediate Cost Savings** - Identify unused resources for deletion
 - **Right-Sizing Opportunities** - Optimize overprovisioned resources
 - **Real Metrics Analysis** - Uses actual CloudWatch data
 - **Actionable Reports** - Clear recommendations with cost estimates
-- **Comprehensive Coverage** - Analyze EC2, EBS, RDS, Lambda, and more
+- **Comprehensive Coverage** - Analyze EC2, EBS, RDS, Lambda, S3, and more
 - **Easy Integration** - Works seamlessly with Amazon Q CLI
 
 ## 📈 Expected Results
 
 The CFM Tips cost optimization server can help you:
 
-- **Identify cost savings** on average
+- **Identify cost savings** on average across all AWS services
 - **Find unused resources** costing hundreds of dollars monthly
 - **Right-size overprovisioned instances** for optimal performance/cost ratio
-- **Optimize storage costs** through volume type recommendations
+- **Optimize storage costs** through volume type and storage class recommendations
 - **Eliminate idle resources** that provide no business value
+- **Reduce S3 costs by 30-60%** through intelligent storage class transitions
+- **Clean up storage waste** from incomplete multipart uploads and orphaned data
+- **Optimize API request patterns** to minimize S3 request charges
+- **Reduce CloudWatch costs** through log retention and metrics optimization
+- **Eliminate unused alarms and dashboards** reducing monitoring overhead
 
 ## 🤝 Contributing
 
