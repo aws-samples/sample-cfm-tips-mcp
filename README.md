@@ -114,7 +114,7 @@ The below creates an IAM policy with for list, read and describe actions only:
 ### Prerequisites
 - **Python 3.11** or higher
 - AWS CLI configured with appropriate credentials
-- Amazon Q CLI (for MCP integration) - https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html
+- Amazon Kiro CLI (for MCP integration) - https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing.html
 
 ### Setup Steps
 
@@ -147,9 +147,9 @@ The below creates an IAM policy with for list, read and describe actions only:
    python3 setup.py
    ```
 
-6. **Usage Option 1: Using the Q CLI Chat**
+6. **Usage Option 1: Using the Kiro CLI Chat**
    ```bash
-   q chat
+   kiro-cli
    Show me cost optimization recommendations
    ```
 
