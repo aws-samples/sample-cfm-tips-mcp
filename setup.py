@@ -3,7 +3,7 @@
 CFM Tips - AWS Cost Optimization MCP Server Setup Script
 
 This script helps set up the CFM Tips AWS Cost Optimization MCP Server
-for use with Amazon Q CLI and other MCP-compatible clients.
+for use with Kiro CLI and other MCP-compatible clients.
 """
 
 import os
@@ -109,11 +109,11 @@ def create_mcp_config():
     print("\n⚙️  Creating MCP configuration...")
     
     current_dir = os.getcwd()
-    amazonq_dir = Path.home() / ".aws" / "amazonq"
-    config_file = amazonq_dir / "mcp.json"
+    kiro_dir = Path.home() / ".kiro" / "settings"
+    config_file = kiro_dir / "mcp.json"
     
-    # Create amazonq directory if it doesn't exist
-    amazonq_dir.mkdir(parents=True, exist_ok=True)
+    # Create kiro directory if it doesn't exist
+    kiro_dir.mkdir(parents=True, exist_ok=True)
     
     # Load existing config or create new one
     existing_config = {}
@@ -235,9 +235,9 @@ def show_usage_instructions(config_file):
     print("=" * 60)
     
     print("\n🚀 Quick Start:")
-    print(f"   q chat ")
+    print("   kiro-cli chat")
     
-    print("\n💬 Example commands in Amazon Q:")
+    print("\n💬 Example commands in Kiro:")
     examples = [
         "Run comprehensive cost analysis for us-east-1",
         "Find unused EBS volumes costing money",
@@ -308,7 +308,7 @@ def main():
     if aws_ok and test_ok:
         show_usage_instructions(config_file)
         print("\n🎯 Ready to use! Start with:")
-        print(f"   q chat ")
+        print("   kiro-cli chat")
     else:
         print("\n⚠️  Setup completed with warnings. Please address the issues above.")
         if not aws_ok:
