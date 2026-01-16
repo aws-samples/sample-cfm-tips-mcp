@@ -12,10 +12,11 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from mcp.types import TextContent
 
 # Import the functions under test
-from runbook_functions import run_cloudwatch_metrics_optimization
+# Note: These tests are outdated and need refactoring
+# from playbooks.cloudwatch.cloudwatch_optimization import run_cloudwatch_metrics_optimization_mcp
 
 
-@pytest.mark.skip(reason="Tests need refactoring to match actual API structure")
+@pytest.mark.skip(reason="Tests need refactoring to match actual API structure and correct imports")
 class TestMCPPaginationBug:
     """Test suite to identify where pagination is failing in the MCP flow."""
     

@@ -14,7 +14,6 @@ from playbooks.cloudwatch.optimization_orchestrator import CloudWatchOptimizatio
 
 
 @pytest.mark.integration
-@pytest.mark.cloudwatch
 class TestCloudWatchComprehensiveToolIntegration:
     """Test CloudWatch comprehensive optimization tool integration."""
     
@@ -205,7 +204,6 @@ class TestCloudWatchComprehensiveToolIntegration:
 
 
 @pytest.mark.integration
-@pytest.mark.cloudwatch
 class TestCloudWatchOrchestratorRealIntegration:
     """Test CloudWatch orchestrator with more realistic scenarios."""
     

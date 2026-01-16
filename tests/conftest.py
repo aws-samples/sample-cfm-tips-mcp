@@ -522,3 +522,5 @@ pytest.mark.unit = pytest.mark.unit
 pytest.mark.integration = pytest.mark.integration
 pytest.mark.performance = pytest.mark.performance
 pytest.mark.no_cost_validation = pytest.mark.no_cost_validation
+pytest.mark.live = pytest.mark.live
+pytest.mark.cloudwatch = pytest.mark.cloudwatch

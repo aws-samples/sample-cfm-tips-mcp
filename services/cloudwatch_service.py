@@ -334,9 +334,21 @@ class CloudWatchDAO:
     
     async def list_metrics(self, namespace: Optional[str] = None, 
                           metric_name: Optional[str] = None,
-                          dimensions: Optional[List[Dict[str, str]]] = None) -> Dict[str, Any]:
-        """List CloudWatch metrics with caching."""
-        cache_key = f"metrics_{namespace}_{metric_name}_{hash(str(dimensions))}"
+                          dimensions: Optional[List[Dict[str, str]]] = None,
+                          page: int = 1) -> Dict[str, Any]:
+        """
+        List CloudWatch metrics with pagination.
+        
+        Args:
+            namespace: Filter by namespace
+            metric_name: Filter by metric name  
+            dimensions: Filter by dimensions
+            page: Which AWS API page to retrieve (1-based, default=1)
+        
+        Returns:
+            Dictionary with metrics from requested page only
+        """
+        cache_key = f"metrics_{namespace}_{metric_name}_{hash(str(dimensions))}_page{page}"
         cached_result = self._cache.get(cache_key)
         if cached_result:
             return cached_result
@@ -352,14 +364,20 @@ class CloudWatchDAO:
         metrics = []
         paginator = self.cloudwatch_client.get_paginator('list_metrics')
         
-        for page in paginator.paginate(**params):
-            metrics.extend(page.get('Metrics', []))
+        # Only fetch the requested page
+        page_count = 0
+        for page_response in paginator.paginate(**params):
+            page_count += 1
+            if page_count == page:
+                metrics.extend(page_response.get('Metrics', []))
+                break
         
         result = {
             'metrics': metrics,
             'total_count': len(metrics),
             'namespace': namespace,
-            'filtered': bool(namespace or metric_name or dimensions)
+            'filtered': bool(namespace or metric_name or dimensions),
+            'page': page
         }
         
         self._cache.set(cache_key, result)
@@ -462,9 +480,14 @@ class CloudWatchDAO:
         
         response = self.cloudwatch_client.get_dashboard(DashboardName=dashboard_name)
         
+        # Ensure dashboard_body is never empty string - use '{}' as default
+        dashboard_body = response.get('DashboardBody', '{}')
+        if not dashboard_body or dashboard_body.strip() == '':
+            dashboard_body = '{}'
+        
         result = {
             'dashboard_name': dashboard_name,
-            'dashboard_body': response.get('DashboardBody', '{}'),
+            'dashboard_body': dashboard_body,
             'dashboard_arn': response.get('DashboardArn')
         }
         
@@ -993,7 +1016,13 @@ class CWGeneralSpendTips:
                 
                 try:
                     dashboard_config = await self.dao.get_dashboard(dashboard_name)
-                    dashboard_body = json.loads(dashboard_config.get('dashboard_body', '{}'))
+                    dashboard_body_str = dashboard_config.get('dashboard_body', '{}')
+                    
+                    # Defensive: ensure we never try to parse empty string
+                    if not dashboard_body_str or dashboard_body_str.strip() == '':
+                        dashboard_body_str = '{}'
+                    
+                    dashboard_body = json.loads(dashboard_body_str)
                     
                     # Analyze widgets and metrics
                     widgets = dashboard_body.get('widgets', [])
@@ -1220,6 +1249,55 @@ class CWMetricsTips:
         self.cost_preferences = cost_preferences
         self._page_size = 10  # Items per page
     
+    async def list_metrics(self, namespace: Optional[str] = None,
+                          metric_name: Optional[str] = None,
+                          **kwargs) -> CloudWatchOperationResult:
+        """List CloudWatch metrics (FREE operation)."""
+        try:
+            data = await self.dao.list_metrics(
+                namespace=namespace,
+                metric_name=metric_name
+            )
+            return CloudWatchOperationResult(
+                success=True,
+                data=data,
+                operation_name="list_metrics",
+                cost_incurred=False,
+                operation_type="free",
+                primary_data_source="cloudwatch_config"
+            )
+        except Exception as e:
+            logger.error(f"Error listing metrics: {str(e)}")
+            return CloudWatchOperationResult(
+                success=False,
+                error_message=str(e),
+                operation_name="list_metrics"
+            )
+    
+    async def get_targeted_metric_statistics(self, namespace: str,
+                                            metric_name: str,
+                                            **kwargs) -> CloudWatchOperationResult:
+        """Get metric statistics (MINIMAL COST operation)."""
+        try:
+            # This requires GetMetricStatistics which has minimal cost
+            # Return placeholder indicating this needs metrics API
+            return CloudWatchOperationResult(
+                success=True,
+                data={'metrics': [], 'requires_get_metric_statistics': True},
+                operation_name="get_targeted_metric_statistics",
+                cost_incurred=False,
+                operation_type="minimal_cost",
+                primary_data_source="cloudwatch_metrics",
+                fallback_used=True
+            )
+        except Exception as e:
+            logger.error(f"Error getting metric statistics: {str(e)}")
+            return CloudWatchOperationResult(
+                success=False,
+                error_message=str(e),
+                operation_name="get_targeted_metric_statistics"
+            )
+    
     async def listInstancesWithDetailedMonitoring(self, page: int = 1) -> Dict[str, Any]:
         """
         Get paginated list of EC2 instances with detailed monitoring enabled.
@@ -1344,7 +1422,7 @@ class CWMetricsTips:
             Dict with custom_metrics, pagination, summary, and pricing_info
         """
         try:
-            # Call 1: Get all metrics (FREE)
+            # FREE TIER: Get only first AWS API page (~500 metrics)
             all_metrics_params = {}
             if namespace_filter:
                 all_metrics_params['Namespace'] = namespace_filter
@@ -1352,20 +1430,32 @@ class CWMetricsTips:
             all_metrics = []
             paginator = self.dao.cloudwatch_client.get_paginator('list_metrics')
             
+            # FREE TIER: Only scan 1 page for fast, free response
+            page_count = 0
+            max_pages = 1
             for page_response in paginator.paginate(**all_metrics_params):
                 all_metrics.extend(page_response.get('Metrics', []))
+                page_count += 1
+                if page_count >= max_pages:
+                    logger.info(f"FREE TIER: Scanned {page_count} AWS page, {len(all_metrics)} total metrics")
+                    break
             
-            # Filter to custom metrics only (exclude AWS/* namespaces)
+            # Filter to custom metrics only (exclude AWS/* namespaces - those are free anyway)
             custom_metrics = [m for m in all_metrics if not m.get('Namespace', '').startswith('AWS/')]
             
-            # Call 2: Get recently active metrics (PT3H = Past 3 Hours) (FREE)
+            # FREE TIER: Get recently active metrics (PT3H = Past 3 Hours) - also limit to 1 page
             recently_active_params = {'RecentlyActive': 'PT3H'}
             if namespace_filter:
                 recently_active_params['Namespace'] = namespace_filter
             
             recently_active_metrics = []
+            page_count = 0
             for page_response in paginator.paginate(**recently_active_params):
                 recently_active_metrics.extend(page_response.get('Metrics', []))
+                page_count += 1
+                if page_count >= max_pages:
+                    logger.info(f"FREE TIER: Scanned {page_count} recently active page")
+                    break
             
             # Create set of recently active metric identifiers for fast lookup
             recently_active_set = set()
@@ -1428,8 +1518,32 @@ class CWMetricsTips:
             total_monthly_cost = billable_metrics * metric_cost
             recently_active_count = sum(1 for m in metrics_with_info if m['recently_active'])
             
-            return {
+            # Detect if we likely have many more metrics (FREE TIER shows sample only)
+            # If we got 500 metrics in 1 page and many are custom, there are likely more
+            likely_more_metrics = len(all_metrics) >= 400 and total_items >= 300
+            
+            # Build recommendations
+            recommendations = []
+            if likely_more_metrics:
+                # Estimate total metrics based on sample
+                estimated_total_custom = total_items * 150  # Conservative estimate
+                estimated_cost_explorer_calls = estimated_total_custom / 500  # ~500 metrics per API page
+                estimated_cost_explorer_cost = estimated_cost_explorer_calls * 0.01  # $0.01 per 1000 API calls
+                
+                recommendations.append({
+                    'type': 'enable_cost_explorer_analysis',
+                    'priority': 'high',
+                    'message': f'FREE TIER shows sample of {total_items} custom metrics from first AWS API page. You likely have many more metrics.',
+                    'action': 'Enable Cost Explorer analysis for comprehensive metrics cost analysis across all metrics',
+                    'estimated_cost': round(estimated_cost_explorer_cost, 2),
+                    'estimated_api_calls': int(estimated_cost_explorer_calls),
+                    'how_to_enable': 'Set allow_cost_explorer=True in cost preferences',
+                    'benefit': 'Get accurate cost data and usage patterns for ALL custom metrics, not just first page sample'
+                })
+            
+            result = {
                 'status': 'success',
+                'data_source': 'free_tier_sample' if not can_spend_for_exact_usage_estimate else 'free_tier_with_paid_usage',
                 'custom_metrics': paginated_metrics,
                 'pagination': {
                     'current_page': page,
@@ -1437,27 +1551,35 @@ class CWMetricsTips:
                     'total_items': total_items,
                     'total_pages': total_pages,
                     'has_next': page < total_pages,
-                    'has_previous': page > 1
+                    'has_previous': page > 1,
+                    'note': 'FREE TIER: Showing sample from first AWS API page only' if likely_more_metrics else 'Showing all custom metrics found'
                 },
                 'summary': {
-                    'total_custom_metrics': total_items,
+                    'total_custom_metrics_in_sample': total_items,
                     'recently_active_metrics': recently_active_count,
                     'inactive_metrics': total_items - recently_active_count,
                     'free_tier_limit': free_tier['metrics_count'],
                     'free_tier_remaining': max(0, free_tier['metrics_count'] - total_items),
-                    'billable_metrics': billable_metrics,
-                    'total_estimated_monthly_cost': round(total_monthly_cost, 4),
-                    'total_estimated_annual_cost': round(total_monthly_cost * 12, 2),
+                    'billable_metrics_in_sample': billable_metrics,
+                    'estimated_monthly_cost_for_sample': round(total_monthly_cost, 4),
+                    'estimated_annual_cost_for_sample': round(total_monthly_cost * 12, 2),
                     'usage_estimation_method': 'exact_paid_page_only' if can_spend_for_exact_usage_estimate else 'dimension_count_free',
-                    'metrics_analyzed_for_usage': len(paginated_metrics) if can_spend_for_exact_usage_estimate else 0
+                    'metrics_analyzed_for_usage': len(paginated_metrics) if can_spend_for_exact_usage_estimate else 0,
+                    'sample_note': 'FREE TIER: Costs shown are for sample only. Enable Cost Explorer for complete analysis.' if likely_more_metrics else None
                 },
                 'pricing_info': pricing,
                 'optimization_tip': {
-                    'message': f'Found {total_items - recently_active_count} metrics not active in past 3 hours. Consider removing unused metrics.',
+                    'message': f'Found {total_items - recently_active_count} metrics not active in past 3 hours in this sample. Consider removing unused metrics.',
                     'potential_savings_monthly': round((total_items - recently_active_count) * metric_cost, 2),
                     'potential_savings_annual': round((total_items - recently_active_count) * metric_cost * 12, 2)
                 }
             }
+            
+            # Add recommendations if any
+            if recommendations:
+                result['recommendations'] = recommendations
+            
+            return result
             
         except Exception as e:
             logger.error(f"Error listing custom metrics: {str(e)}")
@@ -1489,9 +1611,14 @@ class CWMetricsTips:
         return f"{namespace}::{metric_name}::{dim_str}"
     
     async def analyze_metrics_usage(self, namespace_filter: Optional[str] = None) -> Dict[str, Any]:
-        """Analyze custom metrics usage and optimization opportunities."""
+        """
+        Analyze custom metrics usage and optimization opportunities.
+        
+        FREE TIER: Uses first AWS API page only for fast response.
+        """
         try:
-            metrics_data = await self.dao.list_metrics(namespace=namespace_filter)
+            # FREE TIER: Get only page 1 for fast response
+            metrics_data = await self.dao.list_metrics(namespace=namespace_filter, page=1)
             
             # Categorize metrics
             aws_metrics = [m for m in metrics_data['metrics'] 
@@ -1546,6 +1673,55 @@ class CWLogsTips:
         # Import and initialize VendedLogsDAO
         from services.cloudwatch_service_vended_log import VendedLogsDAO
         self._vended_logs_dao = VendedLogsDAO(region=dao.region)
+    
+    async def describe_log_groups(self, log_group_names: Optional[List[str]] = None,
+                                  log_group_name_prefix: Optional[str] = None,
+                                  **kwargs) -> CloudWatchOperationResult:
+        """Get log groups configuration (FREE operation)."""
+        try:
+            data = await self.dao.describe_log_groups(
+                log_group_name_prefix=log_group_name_prefix,
+                log_group_names=log_group_names
+            )
+            return CloudWatchOperationResult(
+                success=True,
+                data=data,
+                operation_name="describe_log_groups",
+                cost_incurred=False,
+                operation_type="free",
+                primary_data_source="cloudwatch_logs_config"
+            )
+        except Exception as e:
+            logger.error(f"Error describing log groups: {str(e)}")
+            return CloudWatchOperationResult(
+                success=False,
+                error_message=str(e),
+                operation_name="describe_log_groups"
+            )
+    
+    async def get_log_group_incoming_bytes(self, log_group_names: Optional[List[str]] = None,
+                                          lookback_days: int = 30,
+                                          **kwargs) -> CloudWatchOperationResult:
+        """Get log group ingestion metrics (MINIMAL COST operation)."""
+        try:
+            # This would require GetMetricStatistics which has minimal cost
+            # For now, return a placeholder that indicates this needs Cost Explorer or metrics
+            return CloudWatchOperationResult(
+                success=True,
+                data={'log_groups': [], 'requires_metrics': True},
+                operation_name="get_log_group_incoming_bytes",
+                cost_incurred=False,
+                operation_type="minimal_cost",
+                primary_data_source="cloudwatch_metrics",
+                fallback_used=True
+            )
+        except Exception as e:
+            logger.error(f"Error getting log group incoming bytes: {str(e)}")
+            return CloudWatchOperationResult(
+                success=False,
+                error_message=str(e),
+                operation_name="get_log_group_incoming_bytes"
+            )
     
     async def analyze_logs_usage(self, log_group_names: Optional[List[str]] = None) -> Dict[str, Any]:
         """Analyze CloudWatch Logs usage and optimization opportunities."""
@@ -2235,6 +2411,27 @@ class CWAlarmsTips:
         self.cost_preferences = cost_preferences
         self._page_size = 10  # Items per page
     
+    async def describe_alarms(self, alarm_names: Optional[List[str]] = None,
+                             **kwargs) -> CloudWatchOperationResult:
+        """Describe CloudWatch alarms (FREE operation)."""
+        try:
+            data = await self.dao.describe_alarms(alarm_names=alarm_names)
+            return CloudWatchOperationResult(
+                success=True,
+                data=data,
+                operation_name="describe_alarms",
+                cost_incurred=False,
+                operation_type="free",
+                primary_data_source="cloudwatch_config"
+            )
+        except Exception as e:
+            logger.error(f"Error describing alarms: {str(e)}")
+            return CloudWatchOperationResult(
+                success=False,
+                error_message=str(e),
+                operation_name="describe_alarms"
+            )
+    
     async def listAlarm(self, page: int = 1, alarm_name_prefix: Optional[str] = None,
                        can_use_expensive_cost_to_estimate: bool = False,
                        lookback_days: int = 30) -> Dict[str, Any]:
@@ -2631,6 +2828,48 @@ class CWDashboardTips:
         self.cost_preferences = cost_preferences
         self._page_size = 10  # Items per page
     
+    async def list_dashboards(self, dashboard_name_prefix: Optional[str] = None,
+                             **kwargs) -> CloudWatchOperationResult:
+        """List CloudWatch dashboards (FREE operation)."""
+        try:
+            data = await self.dao.list_dashboards(dashboard_name_prefix=dashboard_name_prefix)
+            return CloudWatchOperationResult(
+                success=True,
+                data=data,
+                operation_name="list_dashboards",
+                cost_incurred=False,
+                operation_type="free",
+                primary_data_source="cloudwatch_config"
+            )
+        except Exception as e:
+            logger.error(f"Error listing dashboards: {str(e)}")
+            return CloudWatchOperationResult(
+                success=False,
+                error_message=str(e),
+                operation_name="list_dashboards"
+            )
+    
+    async def get_dashboard(self, dashboard_name: str,
+                           **kwargs) -> CloudWatchOperationResult:
+        """Get dashboard configuration (FREE operation)."""
+        try:
+            data = await self.dao.get_dashboard(dashboard_name)
+            return CloudWatchOperationResult(
+                success=True,
+                data=data,
+                operation_name="get_dashboard",
+                cost_incurred=False,
+                operation_type="free",
+                primary_data_source="cloudwatch_config"
+            )
+        except Exception as e:
+            logger.error(f"Error getting dashboard: {str(e)}")
+            return CloudWatchOperationResult(
+                success=False,
+                error_message=str(e),
+                operation_name="get_dashboard"
+            )
+    
     async def listDashboard(self, page: int = 1, dashboard_name_prefix: Optional[str] = None) -> Dict[str, Any]:
         """
         List dashboards ordered by total metric dimensions referenced (descending), paginated.
@@ -2983,6 +3222,82 @@ class CloudWatchService:
         """Clear all cached data."""
         self._dao.clear_cache()
         log_cloudwatch_operation(logger, "cache_cleared")
+    
+    # ========================================================================
+    # BACKWARD COMPATIBILITY METHODS
+    # These delegate to the new specialized tip classes for analyzer compatibility
+    # ========================================================================
+    
+    async def describe_log_groups(self, log_group_names: Optional[List[str]] = None,
+                                  log_group_name_prefix: Optional[str] = None,
+                                  **kwargs) -> CloudWatchOperationResult:
+        """Backward compatibility: Delegate to logs service."""
+        logs_service = self.getLogsService()
+        return await logs_service.describe_log_groups(
+            log_group_names=log_group_names,
+            log_group_name_prefix=log_group_name_prefix,
+            **kwargs
+        )
+    
+    async def get_log_group_incoming_bytes(self, log_group_names: Optional[List[str]] = None,
+                                          lookback_days: int = 30,
+                                          **kwargs) -> CloudWatchOperationResult:
+        """Backward compatibility: Delegate to logs service."""
+        logs_service = self.getLogsService()
+        return await logs_service.get_log_group_incoming_bytes(
+            log_group_names=log_group_names,
+            lookback_days=lookback_days,
+            **kwargs
+        )
+    
+    async def list_metrics(self, namespace: Optional[str] = None,
+                          metric_name: Optional[str] = None,
+                          **kwargs) -> CloudWatchOperationResult:
+        """Backward compatibility: Delegate to metrics service."""
+        metrics_service = self.getMetricsService()
+        return await metrics_service.list_metrics(
+            namespace=namespace,
+            metric_name=metric_name,
+            **kwargs
+        )
+    
+    async def get_targeted_metric_statistics(self, namespace: str,
+                                            metric_name: str,
+                                            **kwargs) -> CloudWatchOperationResult:
+        """Backward compatibility: Delegate to metrics service."""
+        metrics_service = self.getMetricsService()
+        return await metrics_service.get_targeted_metric_statistics(
+            namespace=namespace,
+            metric_name=metric_name,
+            **kwargs
+        )
+    
+    async def describe_alarms(self, alarm_names: Optional[List[str]] = None,
+                             **kwargs) -> CloudWatchOperationResult:
+        """Backward compatibility: Delegate to alarms service."""
+        alarms_service = self.getAlarmsService()
+        return await alarms_service.describe_alarms(
+            alarm_names=alarm_names,
+            **kwargs
+        )
+    
+    async def list_dashboards(self, dashboard_name_prefix: Optional[str] = None,
+                             **kwargs) -> CloudWatchOperationResult:
+        """Backward compatibility: Delegate to dashboards service."""
+        dashboards_service = self.getDashboardsService()
+        return await dashboards_service.list_dashboards(
+            dashboard_name_prefix=dashboard_name_prefix,
+            **kwargs
+        )
+    
+    async def get_dashboard(self, dashboard_name: str,
+                           **kwargs) -> CloudWatchOperationResult:
+        """Backward compatibility: Delegate to dashboards service."""
+        dashboards_service = self.getDashboardsService()
+        return await dashboards_service.get_dashboard(
+            dashboard_name=dashboard_name,
+            **kwargs
+        )
 
 
 # Convenience function for backward compatibility

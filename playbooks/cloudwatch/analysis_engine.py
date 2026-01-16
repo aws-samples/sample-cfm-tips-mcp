@@ -548,14 +548,18 @@ class CloudWatchAnalysisEngine:
                 cost_preferences, dependency_results
             )
             
-            # Cache the result if successful
+            # Cache the result if successful AND has data
+            # Don't cache errors, empty results, or partial failures
             if (self.cache and config.cache_results and 
-                result.get('status') == 'success'):
+                result.get('status') == 'success' and
+                self._has_meaningful_data(result)):
                 self.cache.put(
                     cache_key, result, 
                     ttl_seconds=self.config.cache_ttl_seconds,
                     tags={'analysis_type': analysis_type, 'region': self.region}
                 )
+            elif result.get('status') != 'success':
+                self.logger.info(f"Not caching result for {analysis_type}: status={result.get('status')}")
             
             # Update statistics
             self.total_analyses_run += 1
@@ -635,6 +639,50 @@ class CloudWatchAnalysisEngine:
         ]
         return cache_components
     
+    def _has_meaningful_data(self, result: Dict[str, Any]) -> bool:
+        """
+        Check if analysis result contains meaningful data worth caching.
+        
+        Returns False if:
+        - Result has no 'data' key
+        - Data is empty dict
+        - All nested data structures are empty
+        
+        This prevents caching of failed analyses that returned success status
+        but no actual data.
+        """
+        if 'data' not in result:
+            return False
+        
+        data = result['data']
+        if not data or not isinstance(data, dict):
+            return False
+        
+        # Check if any data structure has content
+        def has_content(obj, depth=0, max_depth=3):
+            """Recursively check if object has any non-empty content."""
+            if depth > max_depth:
+                return False
+            
+            if isinstance(obj, dict):
+                if not obj:  # Empty dict
+                    return False
+                # Check if any value has content
+                return any(has_content(v, depth + 1, max_depth) for v in obj.values())
+            elif isinstance(obj, list):
+                if not obj:  # Empty list
+                    return False
+                # Check if any item has content
+                return any(has_content(item, depth + 1, max_depth) for item in obj)
+            elif isinstance(obj, (str, int, float, bool)):
+                # Primitive values count as content
+                return True
+            else:
+                # Other types (None, etc.) don't count
+                return obj is not None
+        
+        return has_content(data)
+    
     async def _check_dependencies(self, analysis_type: str, config: AnalyzerConfig, 
                                 **kwargs) -> Dict[str, Any]:
         """Check and resolve analyzer dependencies."""
@@ -672,15 +720,9 @@ class CloudWatchAnalysisEngine:
         
         for attempt in range(config.retry_attempts + 1):
             try:
-                # Register large object for memory management
-                if self.memory_manager:
-                    analysis_id = f"{analysis_type}_attempt_{attempt}_{int(datetime.now().timestamp())}"
-                    self.memory_manager.register_large_object(
-                        analysis_id,
-                        kwargs,
-                        size_mb=0.5,  # Estimated size
-                        cleanup_callback=lambda: self.logger.debug(f"Cleaned up analysis data for {analysis_id}")
-                    )
+                # Note: We don't register kwargs dict with memory manager because
+                # Python's weakref cannot create weak references to dict objects.
+                # The kwargs dict is small and short-lived, so memory tracking isn't critical.
                 
                 # Run analysis with intelligent timeout
                 result = await asyncio.wait_for(
@@ -735,8 +777,11 @@ class CloudWatchAnalysisEngine:
                     break
                     
             except Exception as e:
+                import traceback
                 last_error = str(e)
+                stack_trace = traceback.format_exc()
                 self.logger.error(f"Attempt {attempt + 1} for {analysis_type} failed: {str(e)}")
+                self.logger.error(f"Full stack trace:\n{stack_trace}")
                 
                 if attempt < config.retry_attempts:
                     await asyncio.sleep(2 ** attempt)
@@ -1123,9 +1168,11 @@ class CloudWatchAnalysisEngine:
             for plan_item in level_analyses:
                 analyzer_name = plan_item['analyzer_name']
                 
-                # Create analysis task
-                async def run_single_analysis(name=analyzer_name):
-                    return await self.run_analysis(name, **kwargs)
+                # Create analysis task - pass kwargs as explicit dict to avoid weak reference issues
+                # The issue was that **kwargs in the closure couldn't be weakly referenced
+                analysis_kwargs = dict(kwargs)
+                async def run_single_analysis(name=analyzer_name, kw=analysis_kwargs):
+                    return await self.run_analysis(name, **kw)
                 
                 level_tasks.append(run_single_analysis())
             

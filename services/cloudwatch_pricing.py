@@ -60,3 +60,32 @@ class CloudWatchPricing:
         """Calculate CloudWatch Dashboards costs."""
         pricing = self.get_pricing_data('dashboards')
         return self._pricing_dao._calculate_dashboards_cost(usage, pricing)
+    
+    # Additional methods for analyzer compatibility
+    def get_logs_pricing(self) -> Dict[str, Any]:
+        """Get CloudWatch Logs pricing information."""
+        return {
+            'status': 'success',
+            'logs_pricing': self.get_pricing_data('logs')
+        }
+    
+    def get_metrics_pricing(self) -> Dict[str, Any]:
+        """Get CloudWatch Metrics pricing information."""
+        return {
+            'status': 'success',
+            'metrics_pricing': self.get_pricing_data('metrics')
+        }
+    
+    def get_alarms_pricing(self) -> Dict[str, Any]:
+        """Get CloudWatch Alarms pricing information."""
+        return {
+            'status': 'success',
+            'alarms_pricing': self.get_pricing_data('alarms')
+        }
+    
+    def get_dashboards_pricing(self) -> Dict[str, Any]:
+        """Get CloudWatch Dashboards pricing information."""
+        return {
+            'status': 'success',
+            'dashboards_pricing': self.get_pricing_data('dashboards')
+        }

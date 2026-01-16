@@ -656,12 +656,13 @@ async def list_tools() -> List[Tool]:
             ),
             Tool(
                 name="cloudwatch_comprehensive_optimization_tool",
-                description="Run comprehensive CloudWatch optimization using the unified optimization tool with intelligent orchestration. Provide holistic Well-Architected recommendations for Cost Optimization, Performance Efficiency, and Operational Excellence.",
+                description="Run comprehensive CloudWatch optimization using the unified optimization tool with intelligent orchestration. Returns aggregate summary by default to avoid token overflow. Use detail_level='full' for complete resource details or query session data for specific resources. Provide holistic Well-Architected recommendations for Cost Optimization, Performance Efficiency, and Operational Excellence.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "region": {"type": "string", "description": "AWS region to analyze"},
                         "lookback_days": {"type": "integer", "default": 30, "description": "Days to analyze CloudWatch usage"},
+                        "detail_level": {"type": "string", "enum": ["summary", "full"], "default": "summary", "description": "Level of detail in response. 'summary' returns aggregate metrics (recommended), 'full' returns all resources (may exceed token limits)"},
                         "page": {"type": "integer", "default": 1, "description": "Page number for pagination"},
                         "page_size": {"type": "integer", "default": 10, "description": "Number of items per page"},
                         "include_executive_summary": {"type": "boolean", "default": True, "description": "Include executive summary"},
@@ -709,6 +710,47 @@ async def list_tools() -> List[Tool]:
                 }
             ),
             
+            # Database Savings Plans Tools
+            Tool(
+                name="database_savings_plans_analysis",
+                description="Run comprehensive Database Savings Plans analysis with automated recommendations for AWS database services. Analyzes current on-demand usage for Amazon Aurora, RDS, DynamoDB, ElastiCache (Valkey), DocumentDB, Neptune, Keyspaces, Timestream, and DMS. Focuses on latest-generation instance families (M7, R7, R8) eligible for Database Savings Plans with 1-year terms and no upfront payment. Provides Well-Architected recommendations for Cost Optimization.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "region": {"type": "string", "description": "AWS region to analyze (optional, defaults to all regions)"},
+                        "lookback_period_days": {"type": "integer", "default": 30, "description": "Analysis period in days (30, 60, or 90)", "enum": [30, 60, 90]},
+                        "services": {"type": "array", "items": {"type": "string"}, "description": "Database services to analyze (optional, defaults to all supported services)"},
+                        "include_ri_comparison": {"type": "boolean", "default": True, "description": "Compare Database Savings Plans with Reserved Instances for older generation instances"}
+                    }
+                }
+            ),
+            Tool(
+                name="database_savings_plans_purchase_analyzer",
+                description="Purchase analyzer mode for Database Savings Plans - model custom commitment scenarios with user-specified hourly amounts. Simulate projected cost, coverage, and utilization for custom commitments within Database Savings Plans constraints (1-year terms, no upfront payment, latest-generation instances only). Provides Well-Architected recommendations for Cost Optimization.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "hourly_commitment": {"type": "number", "description": "Custom hourly commitment amount in USD (required)", "minimum": 0.01, "maximum": 10000.0},
+                        "commitment_term": {"type": "string", "enum": ["1_YEAR"], "default": "1_YEAR", "description": "Commitment term (only 1_YEAR supported for Database Savings Plans)"},
+                        "payment_option": {"type": "string", "enum": ["NO_UPFRONT"], "default": "NO_UPFRONT", "description": "Payment option (only NO_UPFRONT supported for 1-year Database Savings Plans)"},
+                        "region": {"type": "string", "description": "AWS region to analyze (optional, defaults to all regions)"},
+                        "adjusted_usage_projection": {"type": "number", "description": "Optional adjusted hourly usage projection for future scenarios", "minimum": 0.01}
+                    },
+                    "required": ["hourly_commitment"]
+                }
+            ),
+            Tool(
+                name="database_savings_plans_existing_analysis",
+                description="Analyze existing Database Savings Plans utilization and coverage to optimize current commitments and identify gaps. Reviews current Database Savings Plans performance, calculates utilization and coverage percentages, identifies over-commitment and unused capacity. Provides Well-Architected recommendations for Cost Optimization.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "region": {"type": "string", "description": "AWS region to analyze (optional, defaults to all regions)"},
+                        "lookback_period_days": {"type": "integer", "default": 30, "description": "Analysis period in days (30, 60, or 90)", "enum": [30, 60, 90]}
+                    }
+                }
+            ),
+            
             # Comprehensive Analysis
             Tool(
                 name="comprehensive_analysis",
@@ -720,6 +762,53 @@ async def list_tools() -> List[Tool]:
                         "services": {"type": "array", "items": {"type": "string"}, "default": ["ec2", "ebs", "rds", "lambda", "cloudtrail", "s3"]},
                         "lookback_period_days": {"type": "integer", "default": 14},
                         "output_format": {"type": "string", "enum": ["json", "markdown"], "default": "json"}
+                    }
+                }
+            ),
+            
+            # NAT Gateway Optimization Tools
+            Tool(
+                name="nat_gateway_optimization",
+                description="Run comprehensive NAT Gateway optimization analysis to identify underutilized, redundant, and unused NAT Gateways. Provide Well-Architected recommendations for Cost Optimization and Network Architecture.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "region": {"type": "string", "description": "AWS region to analyze"},
+                        "data_transfer_threshold_gb": {"type": "number", "description": "Minimum GB of data transfer to consider utilized", "default": 1.0},
+                        "lookback_days": {"type": "integer", "description": "Number of days to analyze metrics", "default": 14}
+                    }
+                }
+            ),
+            Tool(
+                name="nat_gateway_underutilized",
+                description="Identify underutilized NAT Gateways based on data transfer metrics with cost optimization. Provide Well-Architected recommendations for Cost Optimization.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "region": {"type": "string", "description": "AWS region to analyze"},
+                        "data_transfer_threshold_gb": {"type": "number", "description": "Minimum GB threshold for utilization", "default": 1.0},
+                        "lookback_days": {"type": "integer", "description": "Number of days to analyze", "default": 14},
+                        "zero_cost_mode": {"type": "boolean", "description": "Only use CloudWatch if Trusted Advisor unavailable (enables $0 cost analysis)", "default": True}
+                    }
+                }
+            ),
+            Tool(
+                name="nat_gateway_redundant",
+                description="Identify potentially redundant NAT Gateways in the same availability zone. Provide Well-Architected recommendations for Cost Optimization and Reliability.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "region": {"type": "string", "description": "AWS region to analyze"}
+                    }
+                }
+            ),
+            Tool(
+                name="nat_gateway_unused",
+                description="Identify NAT Gateways that are not referenced by any route tables. Provide Well-Architected recommendations for Cost Optimization.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "region": {"type": "string", "description": "AWS region to analyze"}
                     }
                 }
             )
@@ -854,6 +943,14 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         elif name == "get_cloudwatch_cost_estimate":
             return await get_cloudwatch_cost_estimate(arguments)
         
+        # Database Savings Plans Tools
+        elif name == "database_savings_plans_analysis":
+            return await run_database_savings_plans_analysis(arguments)
+        elif name == "database_savings_plans_purchase_analyzer":
+            return await run_purchase_analyzer(arguments)
+        elif name == "database_savings_plans_existing_analysis":
+            return await analyze_existing_savings_plans(arguments)
+        
         # Additional AWS Service Tools
         elif name == "get_trusted_advisor_checks":
             return await get_trusted_advisor_checks(arguments)
@@ -863,6 +960,16 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
         # Comprehensive Analysis
         elif name == "comprehensive_analysis":
             return await run_comprehensive_cost_analysis(arguments)
+        
+        # NAT Gateway Optimization Tools
+        elif name == "nat_gateway_optimization":
+            return await run_nat_gateway_optimization_analysis(arguments)
+        elif name == "nat_gateway_underutilized":
+            return await identify_underutilized_nat_gateways(arguments)
+        elif name == "nat_gateway_redundant":
+            return await identify_redundant_nat_gateways(arguments)
+        elif name == "nat_gateway_unused":
+            return await identify_unused_nat_gateways(arguments)
         
         else:
             logger.warning(f"Unknown tool requested: {name}")
@@ -1087,6 +1194,12 @@ from playbooks.rds.rds_optimization import (
     identify_idle_rds_instances_wrapper
 )
 
+from playbooks.rds.database_savings_plans import (
+    run_database_savings_plans_analysis,
+    run_purchase_analyzer,
+    analyze_existing_savings_plans
+)
+
 from playbooks.aws_lambda.lambda_optimization import (
     run_lambda_optimization_analysis,
     generate_lambda_optimization_report,
@@ -1126,6 +1239,13 @@ from playbooks.cloudwatch.cloudwatch_optimization import (
     query_cloudwatch_analysis_results_mcp as query_cloudwatch_analysis_results,
     validate_cloudwatch_cost_preferences_mcp as validate_cloudwatch_cost_preferences,
     get_cloudwatch_cost_estimate_mcp as get_cloudwatch_cost_estimate
+)
+
+from runbook_functions import (
+    run_nat_gateway_optimization_analysis,
+    identify_underutilized_nat_gateways,
+    identify_redundant_nat_gateways,
+    identify_unused_nat_gateways
 )
 
 # Additional AWS service functions

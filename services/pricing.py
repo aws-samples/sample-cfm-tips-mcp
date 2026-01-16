@@ -222,6 +222,95 @@ def get_lambda_pricing(
         logger.error(f"Error getting Lambda pricing: {str(e)}")
         return {'status': 'error', 'message': str(e), 'price_per_gb_second': 0.0000166667}
 
+def get_nat_gateway_pricing(
+    region: str = 'us-east-1'
+) -> Dict[str, Any]:
+    """Get NAT Gateway pricing from AWS Price List API."""
+    try:
+        pricing_client = boto3.client('pricing', region_name='us-east-1')
+        region_map = _get_all_aws_regions()
+        location = region_map.get(region, 'US East (N. Virginia)')
+        
+        response = pricing_client.get_products(
+            ServiceCode='AmazonVPC',
+            Filters=[
+                {'Type': 'TERM_MATCH', 'Field': 'productFamily', 'Value': 'NAT Gateway'},
+                {'Type': 'TERM_MATCH', 'Field': 'location', 'Value': location},
+                {'Type': 'TERM_MATCH', 'Field': 'usagetype', 'Value': f'{region.replace("-", "").upper()}:NatGateway-Hours'}
+            ]
+        )
+        
+        if not response['PriceList']:
+            # Try alternative usage type format
+            response = pricing_client.get_products(
+                ServiceCode='AmazonVPC',
+                Filters=[
+                    {'Type': 'TERM_MATCH', 'Field': 'productFamily', 'Value': 'NAT Gateway'},
+                    {'Type': 'TERM_MATCH', 'Field': 'location', 'Value': location}
+                ]
+            )
+        
+        if response['PriceList']:
+            # Find the hourly pricing for NAT Gateway
+            for price_item in response['PriceList']:
+                price_data = json.loads(price_item)
+                
+                # Check if this is the hourly charge (not data processing)
+                product_attributes = price_data.get('product', {}).get('attributes', {})
+                usage_type = product_attributes.get('usagetype', '')
+                
+                if 'NatGateway-Hours' in usage_type or 'NAT-Gateway-Hours' in usage_type:
+                    terms = price_data['terms']['OnDemand']
+                    term_key = list(terms.keys())[0]
+                    price_dimensions = terms[term_key]['priceDimensions']
+                    dimension_key = list(price_dimensions.keys())[0]
+                    hourly_price = float(price_dimensions[dimension_key]['pricePerUnit']['USD'])
+                    
+                    monthly_price = hourly_price * 24 * 30.44  # Average days per month
+                    
+                    return {
+                        'status': 'success',
+                        'region': region,
+                        'hourly_price': hourly_price,
+                        'monthly_price': round(monthly_price, 2),
+                        'data_processing_price_per_gb': 0.045,  # Standard across all regions
+                        'source': 'aws_price_list_api',
+                        'usage_type': usage_type
+                    }
+        
+        # Fallback to known pricing if API fails
+        fallback_pricing = {
+            'us-east-1': 0.045, 'us-east-2': 0.045, 'us-west-1': 0.048, 'us-west-2': 0.045,
+            'eu-west-1': 0.048, 'eu-west-2': 0.048, 'eu-central-1': 0.048,
+            'ap-southeast-1': 0.048, 'ap-southeast-2': 0.048, 'ap-northeast-1': 0.048
+        }
+        
+        hourly_price = fallback_pricing.get(region, 0.045)
+        monthly_price = hourly_price * 24 * 30.44
+        
+        return {
+            'status': 'fallback',
+            'region': region,
+            'hourly_price': hourly_price,
+            'monthly_price': round(monthly_price, 2),
+            'data_processing_price_per_gb': 0.045,
+            'source': 'fallback_pricing',
+            'message': 'Used fallback pricing - API response was empty'
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting NAT Gateway pricing: {str(e)}")
+        # Fallback pricing for us-east-1
+        return {
+            'status': 'error',
+            'region': region,
+            'hourly_price': 0.045,
+            'monthly_price': 32.40,
+            'data_processing_price_per_gb': 0.045,
+            'source': 'error_fallback',
+            'message': str(e)
+        }
+
 def get_all_regions() -> List[str]:
     """Get list of all supported AWS regions."""
     return list(_get_all_aws_regions().keys())

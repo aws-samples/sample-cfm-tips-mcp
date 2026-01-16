@@ -1,5 +1,5 @@
 # Testing dependencies for S3 optimization system
-
+mcp>=1.0.0
 # Core testing framework
 pytest>=7.0.0
 pytest-asyncio>=0.21.0

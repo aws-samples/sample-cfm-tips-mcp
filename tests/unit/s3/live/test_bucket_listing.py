@@ -4,8 +4,10 @@ Simple test to verify S3 bucket listing works.
 
 import asyncio
 import boto3
+import pytest
 
 
+@pytest.mark.live
 async def test_list_buckets():
     """Test basic S3 bucket listing."""
     

@@ -25,7 +25,7 @@ We welcome contributions to the CFM Tips AWS Cost Optimization MCP Server! This 
 
 #### Prerequisites
 
-- Python 3.11 or higher
+- Python 3.8 or higher
 - AWS CLI configured with test credentials
 - Familiarity with MCP (Model Context Protocol)
 - Understanding of AWS cost optimization concepts
@@ -34,8 +34,8 @@ We welcome contributions to the CFM Tips AWS Cost Optimization MCP Server! This 
 
 1. **Fork the repository**
    ```bash
-   git clone https://github.com/aws-samples/sample-cfm-tips-mcp.git
-   cd sample-cfm-tips-mcp
+   git clone git@ssh.gitlab.aws.dev:cfm-tips/cfm-tips-mcp.git
+   cd cfm-tips-mcp
    ```
 
 2. **Create a virtual environment**
@@ -46,7 +46,7 @@ We welcome contributions to the CFM Tips AWS Cost Optimization MCP Server! This 
 
 3. **Install dependencies**
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements_fixed.txt
    pip install -r requirements_dev.txt  # If available
    ```
 
@@ -74,9 +74,9 @@ We welcome contributions to the CFM Tips AWS Cost Optimization MCP Server! This 
    python3 test_runbooks.py
    
    # Test specific functionality
-   python3 -c "from runbook_functions import your_function; print('OK')"
+   python3 -c "from playbooks.ec2.ec2_optimization import run_ec2_right_sizing_analysis; print('OK')"
    
-   # Test with Amazon Q (if possible)
+   # Test with Kiro (if possible)
    q chat
    ```
 
@@ -139,7 +139,7 @@ async def your_new_tool(arguments: Dict[str, Any]) -> List[TextContent]:
 
 1. **Add tool definition** to `list_tools()` in `mcp_server_with_runbooks.py`
 2. **Add tool handler** to `call_tool()` function
-3. **Implement tool function** in `runbook_functions.py`
+3. **Implement tool function** in the appropriate playbook (e.g., `playbooks/ec2/ec2_optimization.py`)
 4. **Add tests** for the new functionality
 5. **Update documentation**
 
@@ -193,7 +193,7 @@ async def your_new_tool(arguments: Dict[str, Any]) -> List[TextContent]:
 - Include error case testing
 
 ### Manual Testing
-- Test with Amazon Q CLI
+- Test with Kiro CLI
 - Verify tool responses are properly formatted
 - Check error handling with invalid inputs
 - Test in different AWS regions

@@ -130,6 +130,48 @@ class ServiceOrchestrator:
             
             # Always store data in a consistent format with 'value' column containing JSON
             if isinstance(data, dict):
+                # Check for service-specific data keys first
+                if service == 'nat_gateway':
+                    # NAT Gateway specific keys
+                    if 'underutilized_nat_gateways' in data and isinstance(data['underutilized_nat_gateways'], list):
+                        result = []
+                        for item in data['underutilized_nat_gateways']:
+                            result.append({
+                                'value': json.dumps(item),
+                                'service': service,
+                                'operation': operation,
+                                'item_type': 'underutilized_nat_gateways'
+                            })
+                        return result
+                    elif 'unused_nat_gateways' in data and isinstance(data['unused_nat_gateways'], list):
+                        result = []
+                        for item in data['unused_nat_gateways']:
+                            result.append({
+                                'value': json.dumps(item),
+                                'service': service,
+                                'operation': operation,
+                                'item_type': 'unused_nat_gateways'
+                            })
+                        return result
+                    elif 'redundant_groups' in data and isinstance(data['redundant_groups'], list):
+                        # Flatten redundant groups to individual NAT gateways
+                        result = []
+                        for group in data['redundant_groups']:
+                            if 'nat_gateways' in group:
+                                for nat_gw in group['nat_gateways']:
+                                    result.append({
+                                        'value': json.dumps(nat_gw),
+                                        'service': service,
+                                        'operation': operation,
+                                        'item_type': 'redundant_nat_gateways'
+                                    })
+                        return result if result else [{
+                            'value': json.dumps(data),
+                            'service': service,
+                            'operation': operation
+                        }]
+                
+                # Standard data format handling
                 if 'data' in data and isinstance(data['data'], dict):
                     # Check if data contains lists of items (like underutilized_instances)
                     data_dict = data['data']

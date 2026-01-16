@@ -12,7 +12,7 @@ import pytest
 # Add the project root to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
 
-from runbook_functions import run_cloudwatch_general_spend_analysis
+from playbooks.cloudwatch.cloudwatch_optimization import run_cloudwatch_general_spend_analysis_mcp as run_cloudwatch_general_spend_analysis
 
 
 @pytest.mark.asyncio

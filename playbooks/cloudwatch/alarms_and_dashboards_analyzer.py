@@ -357,7 +357,14 @@ class AlarmsAndDashboardsAnalyzer(BaseAnalyzer):
         # Parse dashboard body to count widgets and metrics
         import json
         try:
-            body = json.loads(dashboard_body) if isinstance(dashboard_body, str) else dashboard_body
+            # Defensive: handle empty strings
+            if isinstance(dashboard_body, str):
+                if not dashboard_body or dashboard_body.strip() == '':
+                    body = {}
+                else:
+                    body = json.loads(dashboard_body)
+            else:
+                body = dashboard_body
         except json.JSONDecodeError:
             body = {}
         

@@ -39,7 +39,6 @@ class ConcreteCloudWatchAnalyzer(BaseAnalyzer):
 
 
 @pytest.mark.unit
-@pytest.mark.cloudwatch
 class TestCloudWatchBaseAnalyzer:
     """Test cases for CloudWatch BaseAnalyzer abstract class."""
     
@@ -321,7 +320,6 @@ class IncompleteCloudWatchAnalyzer2(BaseAnalyzer):
 
 
 @pytest.mark.unit
-@pytest.mark.cloudwatch
 class TestCloudWatchBaseAnalyzerAbstractMethods:
     """Test abstract method enforcement."""
     

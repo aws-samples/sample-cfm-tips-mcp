@@ -117,19 +117,48 @@ class GeneralSpendAnalyzer(BaseAnalyzer):
             # Execute all analysis tasks
             analysis_results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
             
-            # Process results
+            # Process results and collect errors
+            errors = []
+            successful_tasks = 0
+            
             for i, result in enumerate(analysis_results):
                 if isinstance(result, Exception):
-                    self.logger.warning(f"Analysis task {i} failed: {str(result)}")
+                    error_msg = f"Analysis task {i} failed with exception: {str(result)}"
+                    self.logger.error(error_msg)
+                    errors.append(error_msg)
                     analysis_result['fallback_used'] = True
                 elif isinstance(result, dict):
                     if result.get('status') == 'success':
                         # Merge successful results
                         analysis_result['data'].update(result.get('data', {}))
-                    elif result.get('status') == 'error':
-                        # Mark fallback used for error results
-                        self.logger.warning(f"Analysis task {i} returned error: {result.get('error_message', 'Unknown error')}")
+                        successful_tasks += 1
+                    elif result.get('status') == 'partial':
+                        # Merge partial results but track warnings
+                        analysis_result['data'].update(result.get('data', {}))
+                        if 'warnings' in result:
+                            errors.extend(result['warnings'])
+                        successful_tasks += 1
                         analysis_result['fallback_used'] = True
+                    elif result.get('status') == 'error':
+                        # Collect error details
+                        error_msg = f"Analysis task {i} returned error: {result.get('error_message', 'Unknown error')}"
+                        self.logger.error(error_msg)
+                        errors.append(error_msg)
+                        analysis_result['fallback_used'] = True
+            
+            # If all tasks failed, return error
+            if successful_tasks == 0:
+                import traceback
+                error_summary = "; ".join(errors) if errors else "All analysis tasks failed"
+                self.logger.error(f"General spend analysis failed: {error_summary}")
+                return {
+                    'status': 'error',
+                    'error_message': f"All analysis tasks failed: {error_summary}",
+                    'error_type': 'AllTasksFailed',
+                    'errors': errors,
+                    'execution_time': (datetime.now() - start_time).total_seconds(),
+                    'data': {}
+                }
             
             # Generate cost breakdown analysis
             cost_breakdown = await self._generate_cost_breakdown(analysis_result['data'], **kwargs)
@@ -139,8 +168,15 @@ class GeneralSpendAnalyzer(BaseAnalyzer):
             execution_time = (datetime.now() - start_time).total_seconds()
             analysis_result['execution_time'] = execution_time
             
+            # If some tasks failed, mark as partial success
+            if errors:
+                analysis_result['status'] = 'partial'
+                analysis_result['warnings'] = errors
+                self.logger.warning(f"General spend analysis completed with {len(errors)} warnings")
+            
             log_cloudwatch_operation(self.logger, "general_spend_analysis_complete",
                                    execution_time=execution_time,
+                                   status=analysis_result['status'],
                                    cost_incurred=analysis_result['cost_incurred'],
                                    primary_data_source=analysis_result['primary_data_source'])
             
@@ -160,44 +196,91 @@ class GeneralSpendAnalyzer(BaseAnalyzer):
         
         try:
             config_data = {}
+            errors = []
+            
+            # Check if cloudwatch_service is available
+            if not self.cloudwatch_service:
+                error_msg = "CloudWatch service not initialized - cannot fetch configuration data"
+                self.logger.error(error_msg)
+                return {
+                    'status': 'error',
+                    'error_message': error_msg,
+                    'error_type': 'ServiceNotInitialized',
+                    'data': {}
+                }
             
             # Get log groups configuration (FREE)
-            if self.cloudwatch_service:
-                log_groups_result = await self.cloudwatch_service.describe_log_groups(
-                    log_group_names=kwargs.get('log_group_names')
-                )
-                if log_groups_result.success:
-                    config_data['log_groups'] = log_groups_result.data
-                    log_cloudwatch_operation(self.logger, "log_groups_analyzed",
-                                           count=log_groups_result.data.get('total_count', 0))
+            log_groups_result = await self.cloudwatch_service.describe_log_groups(
+                log_group_names=kwargs.get('log_group_names')
+            )
+            if log_groups_result.success:
+                config_data['log_groups'] = log_groups_result.data
+                log_cloudwatch_operation(self.logger, "log_groups_analyzed",
+                                       count=log_groups_result.data.get('total_count', 0))
+            else:
+                error_msg = f"Failed to fetch log groups: {log_groups_result.error}"
+                self.logger.error(error_msg)
+                errors.append(error_msg)
             
             # Get alarms configuration (FREE)
-            if self.cloudwatch_service:
-                alarms_result = await self.cloudwatch_service.describe_alarms(
-                    alarm_names=kwargs.get('alarm_names')
-                )
-                if alarms_result.success:
-                    config_data['alarms'] = alarms_result.data
-                    log_cloudwatch_operation(self.logger, "alarms_analyzed",
-                                           count=alarms_result.data.get('total_count', 0))
+            alarms_result = await self.cloudwatch_service.describe_alarms(
+                alarm_names=kwargs.get('alarm_names')
+            )
+            if alarms_result.success:
+                config_data['alarms'] = alarms_result.data
+                log_cloudwatch_operation(self.logger, "alarms_analyzed",
+                                       count=alarms_result.data.get('total_count', 0))
+            else:
+                error_msg = f"Failed to fetch alarms: {alarms_result.error}"
+                self.logger.error(error_msg)
+                errors.append(error_msg)
             
             # Get dashboards configuration (FREE)
-            if self.cloudwatch_service:
-                dashboards_result = await self.cloudwatch_service.list_dashboards(
-                    dashboard_name_prefix=kwargs.get('dashboard_name_prefix')
-                )
-                if dashboards_result.success:
-                    config_data['dashboards'] = dashboards_result.data
-                    log_cloudwatch_operation(self.logger, "dashboards_analyzed",
-                                           count=dashboards_result.data.get('total_count', 0))
+            dashboards_result = await self.cloudwatch_service.list_dashboards(
+                dashboard_name_prefix=kwargs.get('dashboard_name_prefix')
+            )
+            if dashboards_result.success:
+                config_data['dashboards'] = dashboards_result.data
+                log_cloudwatch_operation(self.logger, "dashboards_analyzed",
+                                       count=dashboards_result.data.get('total_count', 0))
+            else:
+                error_msg = f"Failed to fetch dashboards: {dashboards_result.error}"
+                self.logger.error(error_msg)
+                errors.append(error_msg)
             
             # Get metrics metadata (FREE)
-            if self.cloudwatch_service:
-                metrics_result = await self.cloudwatch_service.list_metrics()
-                if metrics_result.success:
-                    config_data['metrics'] = metrics_result.data
-                    log_cloudwatch_operation(self.logger, "metrics_analyzed",
-                                           count=metrics_result.data.get('total_count', 0))
+            metrics_result = await self.cloudwatch_service.list_metrics()
+            if metrics_result.success:
+                config_data['metrics'] = metrics_result.data
+                log_cloudwatch_operation(self.logger, "metrics_analyzed",
+                                       count=metrics_result.data.get('total_count', 0))
+            else:
+                error_msg = f"Failed to fetch metrics: {metrics_result.error}"
+                self.logger.error(error_msg)
+                errors.append(error_msg)
+            
+            # If all operations failed, return error
+            if not config_data:
+                error_summary = "; ".join(errors) if errors else "All CloudWatch API calls failed with no data returned"
+                self.logger.error(f"Configuration analysis failed: {error_summary}")
+                return {
+                    'status': 'error',
+                    'error_message': f"Failed to fetch any CloudWatch configuration data: {error_summary}",
+                    'error_type': 'DataFetchFailure',
+                    'errors': errors,
+                    'data': {}
+                }
+            
+            # If some operations failed, return partial success
+            if errors:
+                self.logger.warning(f"Configuration analysis partially successful with {len(errors)} errors")
+                return {
+                    'status': 'partial',
+                    'warnings': errors,
+                    'data': {
+                        'configuration_analysis': config_data
+                    }
+                }
             
             return {
                 'status': 'success',

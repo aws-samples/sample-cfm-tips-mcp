@@ -5,6 +5,7 @@ Provides consistent error handling and formatting across all modules.
 """
 
 import logging
+import traceback
 from typing import Dict, Any, List, Optional
 from botocore.exceptions import ClientError, NoCredentialsError
 from mcp.types import TextContent
@@ -44,14 +45,16 @@ class AWSErrorHandler:
         """
         error_code = e.response.get('Error', {}).get('Code', 'Unknown')
         error_message = e.response.get('Error', {}).get('Message', str(e))
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
         
-        logger.error(f"AWS API Error in {context}: {error_code} - {error_message}")
+        logger.error(f"AWS API Error in {context}: {error_code} - {error_message}\n{error_traceback}")
         
         response = {
             "status": "error",
             "error_code": error_code,
             "message": f"AWS API Error: {error_code} - {error_message}",
             "context": context,
+            "traceback": error_traceback,
             "timestamp": logger.handlers[0].formatter.formatTime(logger.makeRecord(
                 logger.name, logging.ERROR, __file__, 0, "", (), None
             )) if logger.handlers else None
@@ -90,15 +93,35 @@ class AWSErrorHandler:
         }
     
     @staticmethod
-    def format_general_error(e: Exception, context: str) -> Dict[str, Any]:
-        """Format general exceptions into standardized response."""
-        logger.error(f"General error in {context}: {str(e)}")
+    def format_general_error(e, context: str) -> Dict[str, Any]:
+        """
+        Format general exceptions into standardized response.
+        
+        Args:
+            e: Exception object or string error message
+            context: Context where the error occurred
+            
+        Returns:
+            Standardized error response dictionary
+        """
+        # Handle both Exception objects and string error messages
+        if isinstance(e, str):
+            error_message = e
+            error_code = "GeneralError"
+            error_traceback = "No traceback available (error passed as string)"
+            logger.error(f"General error in {context}: {error_message}")
+        else:
+            error_message = str(e)
+            error_code = type(e).__name__
+            error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+            logger.error(f"General error in {context}: {error_message}\n{error_traceback}")
         
         return {
             "status": "error",
-            "error_code": type(e).__name__,
-            "message": str(e),
-            "context": context
+            "error_code": error_code,
+            "message": error_message,
+            "context": context,
+            "traceback": error_traceback
         }
     
     @staticmethod

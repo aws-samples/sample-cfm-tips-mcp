@@ -14,7 +14,6 @@ from services.cloudwatch_service import CloudWatchOperationResult
 
 
 @pytest.mark.unit
-@pytest.mark.cloudwatch
 class TestCloudWatchGeneralSpendAnalyzer:
     """Test cases for CloudWatch GeneralSpendAnalyzer."""
     
@@ -444,11 +443,9 @@ class TestCloudWatchGeneralSpendAnalyzer:
         
         result = await analyzer.analyze(region='us-east-1')
         
-        # Should handle error gracefully - analyzer continues with partial results
-        # so status is success but fallback_used is True
-        assert result['status'] == 'success'
-        assert result['fallback_used'] == True
-        assert result['cost_incurred'] == False
+        # Should return error status when all services fail
+        assert result['status'] == 'error'
+        assert 'message' in result or 'error' in result
     
     def test_validate_parameters(self, analyzer):
         """Test parameter validation."""

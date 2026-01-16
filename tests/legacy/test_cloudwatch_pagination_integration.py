@@ -15,7 +15,7 @@ import unittest.mock as mock
 from unittest.mock import MagicMock, patch, AsyncMock
 from playbooks.cloudwatch.result_processor import CloudWatchResultProcessor
 from playbooks.cloudwatch.optimization_orchestrator import CloudWatchOptimizationOrchestrator
-from runbook_functions import cloudwatch_general_spend_analysis
+from playbooks.cloudwatch.cloudwatch_optimization import run_cloudwatch_general_spend_analysis_mcp as cloudwatch_general_spend_analysis
 
 
 class TestCloudWatchPaginationIntegration:

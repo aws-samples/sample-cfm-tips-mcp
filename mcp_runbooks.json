@@ -8,7 +8,9 @@
       "env": {
         "AWS_DEFAULT_REGION": "us-east-1",
         "AWS_PROFILE": "<replace-with-your-aws-profile>",
-        "PYTHONPATH": "<replace-with-project-folder-path>"
+        "PYTHONPATH": "<replace-with-project-folder-path>",
+        "CFM_LOG_LEVEL": "DEBUG",
+        "PYTHONUNBUFFERED": "1"
       },
       "disabled": false,
       "autoApprove": []

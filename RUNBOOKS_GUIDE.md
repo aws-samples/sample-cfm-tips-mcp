@@ -79,7 +79,7 @@ pip install -r requirements_fixed.txt
 ### 4. Configure AWS credentials
 aws configure
 
-### 5.  Add the MCP server config to Amazon Q using the mcp_runbooks.json as a template
+### 5.  Add the MCP server config to Kiro using the mcp_runbooks.json as a template
 vi ~/.aws/amazonq/mcp.json
 
 ## Available Runbook Tools
@@ -252,7 +252,7 @@ Get specific recommendation by ID.
 **Configure AWS credentials**
 ```aws configure```
 
-**Add the MCP server config to Amazon Q using the mcp_runbooks.json as a template**
+**Add the MCP server config to Kiro using the mcp_runbooks.json as a template**
 ```vi ~/.aws/amazonq/mcp.json```
 
 ```bash

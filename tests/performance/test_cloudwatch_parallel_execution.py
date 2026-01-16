@@ -20,7 +20,6 @@ from utils.parallel_executor import ParallelExecutor
 
 
 @pytest.mark.performance
-@pytest.mark.cloudwatch
 @pytest.mark.asyncio
 class TestParallelExecutionPerformance:
     """Performance tests for parallel execution."""
@@ -313,7 +312,6 @@ class TestParallelExecutionPerformance:
 
 
 @pytest.mark.performance
-@pytest.mark.cloudwatch
 @pytest.mark.asyncio
 class TestTimeoutHandlingPerformance:
     """Performance tests for timeout handling."""
@@ -443,7 +441,6 @@ class TestTimeoutHandlingPerformance:
 
 
 @pytest.mark.performance
-@pytest.mark.cloudwatch
 class TestConcurrencyLimits:
     """Test performance under various concurrency limits."""
     

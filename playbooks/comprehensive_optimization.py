@@ -52,7 +52,7 @@ async def run_comprehensive_cost_analysis(arguments: Dict[str, Any]) -> List[Tex
                     'service': 'ec2',
                     'operation': 'underutilized_instances',
                     'function': get_underutilized_instances,
-                    'args': {
+                    'kwargs': {
                         'region': region,
                         'lookback_period_days': lookback_period_days
                     }
@@ -60,8 +60,8 @@ async def run_comprehensive_cost_analysis(arguments: Dict[str, Any]) -> List[Tex
                 {
                     'service': 'ec2',
                     'operation': 'stopped_instances',
-                    'function': lambda **kwargs: {"stopped_instances": []},  # Placeholder
-                    'args': {'region': region}
+                    'function': lambda region=None, **kwargs: {"stopped_instances": []},  # Placeholder
+                    'kwargs': {'region': region}
                 }
             ])
         
@@ -71,7 +71,7 @@ async def run_comprehensive_cost_analysis(arguments: Dict[str, Any]) -> List[Tex
                     'service': 'ebs',
                     'operation': 'underutilized_volumes',
                     'function': get_underutilized_volumes,
-                    'args': {
+                    'kwargs': {
                         'region': region,
                         'lookback_period_days': 30
                     }
@@ -79,8 +79,8 @@ async def run_comprehensive_cost_analysis(arguments: Dict[str, Any]) -> List[Tex
                 {
                     'service': 'ebs',
                     'operation': 'unused_volumes',
-                    'function': lambda **kwargs: {"unused_volumes": []},  # Placeholder
-                    'args': {'region': region}
+                    'function': lambda region=None, **kwargs: {"unused_volumes": []},  # Placeholder
+                    'kwargs': {'region': region}
                 }
             ])
         
@@ -90,7 +90,7 @@ async def run_comprehensive_cost_analysis(arguments: Dict[str, Any]) -> List[Tex
                     'service': 'rds',
                     'operation': 'underutilized_instances',
                     'function': get_underutilized_rds_instances,
-                    'args': {
+                    'kwargs': {
                         'region': region,
                         'lookback_period_days': lookback_period_days
                     }
@@ -99,7 +99,7 @@ async def run_comprehensive_cost_analysis(arguments: Dict[str, Any]) -> List[Tex
                     'service': 'rds',
                     'operation': 'idle_instances',
                     'function': identify_idle_rds_instances,
-                    'args': {
+                    'kwargs': {
                         'region': region,
                         'lookback_period_days': 7
                     }
@@ -112,7 +112,7 @@ async def run_comprehensive_cost_analysis(arguments: Dict[str, Any]) -> List[Tex
                     'service': 'lambda',
                     'operation': 'underutilized_functions',
                     'function': get_underutilized_lambda_functions,
-                    'args': {
+                    'kwargs': {
                         'region': region,
                         'lookback_period_days': lookback_period_days
                     }
@@ -121,7 +121,7 @@ async def run_comprehensive_cost_analysis(arguments: Dict[str, Any]) -> List[Tex
                     'service': 'lambda',
                     'operation': 'unused_functions',
                     'function': identify_unused_lambda_functions,
-                    'args': {
+                    'kwargs': {
                         'region': region,
                         'lookback_period_days': 30
                     }
@@ -133,7 +133,7 @@ async def run_comprehensive_cost_analysis(arguments: Dict[str, Any]) -> List[Tex
                 'service': 'cloudtrail',
                 'operation': 'optimization',
                 'function': run_cloudtrail_optimization,
-                'args': {'region': region}
+                'kwargs': {'region': region}
             })
         
         if "cloudwatch" in services:
@@ -153,7 +153,7 @@ async def run_comprehensive_cost_analysis(arguments: Dict[str, Any]) -> List[Tex
                 'service': 'cloudwatch',
                 'operation': 'comprehensive_optimization',
                 'function': cloudwatch_wrapper,
-                'args': {
+                'kwargs': {
                     'region': region,
                     'lookback_days': lookback_period_days
                 }

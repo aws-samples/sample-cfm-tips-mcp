@@ -221,9 +221,13 @@ class CloudWatchOptimizationTool:
         - Cross-analysis insights and correlations
         - Executive summary with actionable recommendations
         - Detailed configuration and scope information
+        
+        Returns an AGGREGATE SUMMARY by default to avoid token overflow.
+        Use detail_level='full' to get complete resource details.
         """
         
         total_execution_time = (datetime.now() - start_time).total_seconds()
+        detail_level = kwargs.get('detail_level', 'summary')  # 'summary' or 'full'
         
         # Determine overall status based on parallel execution results
         overall_status = 'success'
@@ -247,7 +251,13 @@ class CloudWatchOptimizationTool:
             parallel_results, cross_analysis_insights, executive_summary
         )
         
-        # Create comprehensive report with enhanced structure
+        # Create aggregate summary (always included)
+        aggregate_summary = self._create_aggregate_summary(
+            parallel_results, cross_analysis_insights, executive_summary,
+            execution_plan, top_recommendations, successful_analyses, failed_analyses
+        )
+        
+        # Base report structure with aggregate summary
         report = {
             'status': overall_status,
             'report_type': 'comprehensive_cloudwatch_optimization_v2',
@@ -257,78 +267,280 @@ class CloudWatchOptimizationTool:
             'total_execution_time': total_execution_time,
             'session_id': self.session_id,
             'region': self.region,
+            'detail_level': detail_level,
             
-            # Enhanced Analysis Configuration
-            'analysis_configuration': {
-                'execution_plan': execution_plan,
-                'analysis_scope': analysis_scope,
-                'cost_preferences': cost_preferences,
-                'functionality_coverage': functionality_coverage,
-                'cost_estimate': cost_estimate,
-                'intelligent_orchestration': {
-                    'priority_mode': execution_plan.get('priority_mode', 'balanced'),
-                    'execution_batches': len(execution_plan.get('execution_batches', [])),
-                    'max_parallel_analyses': analysis_scope.get('performance_constraints', {}).get('max_parallel_analyses', 4)
-                }
-            },
+            # AGGREGATE SUMMARY - Always included, token-efficient
+            'aggregate_summary': aggregate_summary,
             
-            # Enhanced Execution Summary
+            # Lightweight execution summary
             'execution_summary': {
-                'parallel_execution_metrics': {
-                    'total_functionalities_requested': len(execution_plan.get('valid_functionalities', [])),
-                    'successful_analyses': successful_analyses,
-                    'failed_analyses': failed_analyses,
-                    'success_rate': (successful_analyses / total_analyses * 100) if total_analyses > 0 else 0,
-                    'total_execution_time': parallel_results.get('total_execution_time', 0),
-                    'average_analysis_time': (parallel_results.get('total_execution_time', 0) / total_analyses) if total_analyses > 0 else 0,
-                    'execution_efficiency': self._calculate_execution_efficiency(parallel_results, execution_plan)
-                },
-                'cost_transparency': {
-                    'cost_incurred': self._extract_cost_incurred(parallel_results),
-                    'cost_incurring_operations': self._extract_cost_operations(parallel_results),
-                    'primary_data_sources': self._extract_primary_data_sources(parallel_results),
-                    'fallback_usage': self._extract_fallback_usage(parallel_results)
-                },
-                'batch_execution_details': parallel_results.get('batch_summaries', [])
+                'successful_analyses': successful_analyses,
+                'failed_analyses': failed_analyses,
+                'success_rate': (successful_analyses / total_analyses * 100) if total_analyses > 0 else 0,
+                'total_execution_time': parallel_results.get('total_execution_time', 0),
+                'cost_incurred': self._extract_cost_incurred(parallel_results),
+                'primary_data_sources': self._extract_primary_data_sources(parallel_results)
             },
             
-            # Enhanced Key Findings and Recommendations
-            'key_findings': self._extract_key_findings_enhanced(parallel_results, cross_analysis_insights, executive_summary),
-            'top_recommendations': top_recommendations,
-            'optimization_priorities': self._determine_optimization_priorities_enhanced(top_recommendations, cross_analysis_insights),
+            # Top recommendations (limited to top 10)
+            'top_recommendations': top_recommendations[:10],
             
-            # Detailed Results with Enhanced Structure
-            'detailed_results': {
+            # Session metadata for drill-down queries
+            'session_metadata': {
+                'session_id': self.session_id,
+                'stored_tables': self._extract_stored_tables(parallel_results),
+                'query_capabilities': 'Use query_cloudwatch_analysis_results to drill down into specific resources',
+                'data_retention': 'Session data available for 24 hours',
+                'available_functionalities': list(parallel_results.get('individual_results', {}).keys())
+            },
+            
+            # Guidance for getting more details
+            'drill_down_guidance': {
+                'message': 'This is an aggregate summary. For detailed resource information, use the following approaches:',
+                'options': [
+                    {
+                        'method': 'Run specific functionality',
+                        'description': 'Run individual analyses (logs_optimization, metrics_optimization, etc.) for detailed resource lists',
+                        'example': 'cloudwatch_logs_optimization with page=1'
+                    },
+                    {
+                        'method': 'Query session data',
+                        'description': 'Use query_cloudwatch_analysis_results to query specific resources',
+                        'example': f'SELECT * FROM cloudwatch_logs WHERE session_id = "{self.session_id}"'
+                    },
+                    {
+                        'method': 'Request full details',
+                        'description': 'Re-run with detail_level="full" (WARNING: may exceed token limits)',
+                        'example': 'cloudwatch_comprehensive_optimization_tool with detail_level="full"'
+                    }
+                ]
+            }
+        }
+        
+        # Only include full details if explicitly requested
+        if detail_level == 'full':
+            report['detailed_results'] = {
                 'individual_analyses': parallel_results.get('individual_results', {}),
                 'cross_analysis_insights': cross_analysis_insights,
                 'executive_summary': executive_summary,
                 'parallel_execution_summary': parallel_results
-            },
-            
-            # Enhanced Session and Data Information
-            'session_metadata': {
-                'session_id': self.session_id,
-                'stored_tables': self._extract_stored_tables(parallel_results),
-                'query_capabilities': 'Full SQL querying available on all stored analysis data',
-                'data_retention': 'Session data available for 24 hours',
-                'cross_analysis_correlations': cross_analysis_insights.get('correlation_strength', 'unknown')
-            },
-            
-            # Enhanced Next Steps with Implementation Guidance
-            'recommended_next_steps': self._generate_next_steps_enhanced(
-                top_recommendations, functionality_coverage, cost_estimate, cross_analysis_insights, executive_summary
-            ),
-            
-            # Implementation Support
-            'implementation_support': {
+            }
+            report['analysis_configuration'] = {
+                'execution_plan': execution_plan,
+                'analysis_scope': analysis_scope,
+                'cost_preferences': cost_preferences,
+                'functionality_coverage': functionality_coverage,
+                'cost_estimate': cost_estimate
+            }
+            report['implementation_support'] = {
                 'cost_impact_analysis': self._generate_cost_impact_analysis(top_recommendations),
                 'risk_assessment': self._generate_risk_assessment(top_recommendations),
                 'timeline_recommendations': self._generate_timeline_recommendations(top_recommendations),
                 'monitoring_recommendations': self._generate_monitoring_recommendations(parallel_results)
             }
-        }
         
         return report
+    
+    def _create_aggregate_summary(self, parallel_results: Dict[str, Any],
+                                 cross_analysis_insights: Dict[str, Any],
+                                 executive_summary: Optional[Dict[str, Any]],
+                                 execution_plan: Dict[str, Any],
+                                 top_recommendations: List[Dict[str, Any]],
+                                 successful_analyses: int,
+                                 failed_analyses: int) -> Dict[str, Any]:
+        """
+        Create a token-efficient aggregate summary of all analyses.
+        
+        This provides high-level metrics without listing all resources.
+        """
+        individual_results = parallel_results.get('individual_results', {})
+        
+        # Aggregate metrics across all analyses
+        total_resources_analyzed = 0
+        total_optimization_opportunities = 0
+        total_potential_savings = 0.0
+        
+        functionality_summaries = {}
+        
+        for functionality, result in individual_results.items():
+            if result.get('status') == 'success':
+                data = result.get('data', {})
+                
+                # Debug logging to understand data structure
+                self.logger.debug(f"Processing {functionality}: data keys = {list(data.keys())}")
+                if 'configuration_analysis' in data:
+                    config = data['configuration_analysis']
+                    self.logger.debug(f"  configuration_analysis keys: {list(config.keys()) if isinstance(config, dict) else type(config)}")
+                if 'log_groups_configuration_analysis' in data:
+                    config = data['log_groups_configuration_analysis']
+                    self.logger.debug(f"  log_groups_configuration_analysis keys: {list(config.keys()) if isinstance(config, dict) else type(config)}")
+                
+                # Extract counts without listing resources - handle different data structures
+                resource_count = self._extract_resource_count(functionality, data)
+                opportunity_count = len(data.get('optimization_opportunities', [])) if 'optimization_opportunities' in data else 0
+                savings = self._extract_potential_savings(functionality, data)
+                
+                self.logger.debug(f"{functionality}: resources={resource_count}, opportunities={opportunity_count}, savings={savings}")
+                
+                total_resources_analyzed += resource_count
+                total_optimization_opportunities += opportunity_count
+                total_potential_savings += savings
+                
+                functionality_summaries[functionality] = {
+                    'status': 'success',
+                    'resources_analyzed': resource_count,
+                    'optimization_opportunities': opportunity_count,
+                    'potential_monthly_savings': savings,
+                    'key_findings': data.get('key_findings', [])[:3],  # Top 3 findings only
+                    'top_recommendation': data.get('recommendations', [{}])[0] if data.get('recommendations') else None
+                }
+        
+        # Cross-analysis summary
+        cross_analysis_summary = {
+            'status': cross_analysis_insights.get('status', 'unknown'),
+            'synergies_identified': len(cross_analysis_insights.get('insights', {}).get('optimization_synergies', [])),
+            'high_priority_correlations': len([
+                rec for rec in cross_analysis_insights.get('insights', {}).get('priority_recommendations', [])
+                if rec.get('priority') in ['critical', 'high']
+            ])
+        }
+        
+        # Executive summary highlights
+        exec_summary_highlights = None
+        if executive_summary and executive_summary.get('status') == 'success':
+            exec_data = executive_summary.get('executive_summary', {})
+            exec_summary_highlights = {
+                'immediate_actions_count': len(exec_data.get('immediate_actions', [])),
+                'critical_findings_count': len(exec_data.get('critical_findings', [])),
+                'total_estimated_savings': exec_data.get('total_potential_savings', 0.0)
+            }
+        
+        return {
+            'overview': {
+                'total_resources_analyzed': total_resources_analyzed,
+                'total_optimization_opportunities': total_optimization_opportunities,
+                'total_potential_monthly_savings': total_potential_savings,
+                'successful_analyses': successful_analyses,
+                'failed_analyses': failed_analyses,
+                'functionalities_executed': list(functionality_summaries.keys())
+            },
+            'functionality_summaries': functionality_summaries,
+            'cross_analysis_summary': cross_analysis_summary,
+            'executive_summary_highlights': exec_summary_highlights,
+            'top_recommendations_count': len(top_recommendations),
+            'critical_recommendations_count': len([r for r in top_recommendations if r.get('priority') == 'critical']),
+            'high_priority_recommendations_count': len([r for r in top_recommendations if r.get('priority') == 'high'])
+        }
+    
+    def _extract_resource_count(self, functionality: str, data: Dict[str, Any]) -> int:
+        """
+        Dynamically extract resource count from analysis data.
+        
+        Recursively searches for count-related fields in the data structure:
+        - total_count, total_items, count fields
+        - Arrays/lists (log_groups, metrics, alarms, dashboards, etc.)
+        - Pagination info (total_items)
+        
+        This approach works regardless of data structure changes.
+        """
+        def find_counts(obj, depth=0, max_depth=5):
+            """Recursively find all count indicators in nested structure."""
+            if depth > max_depth or obj is None:
+                return 0
+            
+            total = 0
+            
+            if isinstance(obj, dict):
+                # Direct count fields
+                for key in ['total_count', 'total_items', 'count']:
+                    if key in obj and isinstance(obj[key], (int, float)):
+                        total += int(obj[key])
+                        return total  # Found explicit count, use it
+                
+                # Check pagination
+                if 'pagination' in obj and isinstance(obj['pagination'], dict):
+                    pagination = obj['pagination']
+                    if 'total_items' in pagination:
+                        return int(pagination['total_items'])
+                
+                # Check for resource arrays
+                for key, value in obj.items():
+                    if isinstance(value, list) and key in [
+                        'log_groups', 'metrics', 'alarms', 'dashboards',
+                        'custom_metrics', 'resources', 'items', 'results'
+                    ]:
+                        total += len(value)
+                    elif isinstance(value, (dict, list)):
+                        # Recurse into nested structures
+                        total += find_counts(value, depth + 1, max_depth)
+            
+            elif isinstance(obj, list):
+                # If it's a list of resources, count it
+                if obj and isinstance(obj[0], dict):
+                    return len(obj)
+            
+            return total
+        
+        count = find_counts(data)
+        
+        self.logger.debug(f"Extracted resource count for {functionality}: {count}")
+        return count
+    
+    def _extract_potential_savings(self, functionality: str, data: Dict[str, Any]) -> float:
+        """
+        Dynamically extract potential savings from analysis data.
+        
+        Recursively searches for savings-related fields:
+        - total_potential_monthly_savings, total_potential_savings
+        - potential_monthly_savings, potential_savings
+        - estimated_monthly_savings, monthly_savings
+        - total_monthly_cost (for general_spend)
+        """
+        def find_savings(obj, depth=0, max_depth=5):
+            """Recursively find savings indicators in nested structure."""
+            if depth > max_depth or obj is None:
+                return 0.0
+            
+            if isinstance(obj, dict):
+                # Priority order for savings fields
+                savings_keys = [
+                    'total_potential_monthly_savings',
+                    'total_potential_savings',
+                    'potential_monthly_savings',
+                    'potential_savings',
+                    'estimated_monthly_savings',
+                    'monthly_savings',
+                    'total_monthly_cost',  # For general_spend
+                    'total_estimated_monthly_cost'
+                ]
+                
+                for key in savings_keys:
+                    if key in obj and isinstance(obj[key], (int, float)):
+                        return float(obj[key])
+                
+                # Recurse into nested structures
+                max_savings = 0.0
+                for value in obj.values():
+                    if isinstance(value, (dict, list)):
+                        nested_savings = find_savings(value, depth + 1, max_depth)
+                        max_savings = max(max_savings, nested_savings)
+                
+                return max_savings
+            
+            elif isinstance(obj, list):
+                # Sum savings from list items
+                total = 0.0
+                for item in obj:
+                    if isinstance(item, dict):
+                        total += find_savings(item, depth + 1, max_depth)
+                return total
+            
+            return 0.0
+        
+        savings = find_savings(data)
+        
+        self.logger.debug(f"Extracted potential savings for {functionality}: ${savings:.2f}")
+        return savings
     
     def _extract_top_recommendations_enhanced(self, parallel_results: Dict[str, Any],
                                             cross_analysis_insights: Dict[str, Any],

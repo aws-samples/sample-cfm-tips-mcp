@@ -67,17 +67,31 @@ async def run_cloudwatch_general_spend_analysis_mcp(arguments: Dict[str, Any]) -
         
         return ResponseFormatter.to_text_content(formatted_result)
         
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as e:
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
         error_message = f"CloudWatch general spend analysis timed out after {timeout_seconds} seconds"
-        logger.error(error_message)
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            error_message, "timeout_error", "cloudwatch_general_spend"
-        ))
+        logger.error(f"{error_message}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": "TimeoutError",
+            "message": error_message,
+            "context": "cloudwatch_general_spend",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)
     except Exception as e:
-        logger.error(f"CloudWatch general spend analysis failed: {str(e)}")
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            str(e), "analysis_error", "cloudwatch_general_spend"
-        ))
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error(f"CloudWatch general spend analysis failed: {str(e)}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": type(e).__name__,
+            "message": str(e),
+            "context": "cloudwatch_general_spend",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)
 
 @handle_aws_error
 async def run_cloudwatch_metrics_optimization_mcp(arguments: Dict[str, Any]) -> List[TextContent]:
@@ -128,17 +142,31 @@ async def run_cloudwatch_metrics_optimization_mcp(arguments: Dict[str, Any]) -> 
         
         return ResponseFormatter.to_text_content(formatted_result)
         
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as e:
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
         error_message = f"CloudWatch metrics optimization analysis timed out after {timeout_seconds} seconds"
-        logger.error(error_message)
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            error_message, "timeout_error", "cloudwatch_metrics_optimization"
-        ))
+        logger.error(f"{error_message}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": "TimeoutError",
+            "message": error_message,
+            "context": "cloudwatch_metrics_optimization",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)
     except Exception as e:
-        logger.error(f"CloudWatch metrics optimization analysis failed: {str(e)}")
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            str(e), "analysis_error", "cloudwatch_metrics_optimization"
-        ))
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error(f"CloudWatch metrics optimization analysis failed: {str(e)}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": type(e).__name__,
+            "message": str(e),
+            "context": "cloudwatch_metrics_optimization",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)
 
 @handle_aws_error
 async def run_cloudwatch_logs_optimization_mcp(arguments: Dict[str, Any]) -> List[TextContent]:
@@ -189,17 +217,31 @@ async def run_cloudwatch_logs_optimization_mcp(arguments: Dict[str, Any]) -> Lis
         
         return ResponseFormatter.to_text_content(formatted_result)
         
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as e:
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
         error_message = f"CloudWatch logs optimization analysis timed out after {timeout_seconds} seconds"
-        logger.error(error_message)
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            error_message, "timeout_error", "cloudwatch_logs_optimization"
-        ))
+        logger.error(f"{error_message}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": "TimeoutError",
+            "message": error_message,
+            "context": "cloudwatch_logs_optimization",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)
     except Exception as e:
-        logger.error(f"CloudWatch logs optimization analysis failed: {str(e)}")
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            str(e), "analysis_error", "cloudwatch_logs_optimization"
-        ))
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error(f"CloudWatch logs optimization analysis failed: {str(e)}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": type(e).__name__,
+            "message": str(e),
+            "context": "cloudwatch_logs_optimization",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)
 
 @handle_aws_error
 async def run_cloudwatch_alarms_and_dashboards_optimization_mcp(arguments: Dict[str, Any]) -> List[TextContent]:
@@ -250,17 +292,31 @@ async def run_cloudwatch_alarms_and_dashboards_optimization_mcp(arguments: Dict[
         
         return ResponseFormatter.to_text_content(formatted_result)
         
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as e:
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
         error_message = f"CloudWatch alarms and dashboards optimization analysis timed out after {timeout_seconds} seconds"
-        logger.error(error_message)
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            error_message, "timeout_error", "cloudwatch_alarms_dashboards_optimization"
-        ))
+        logger.error(f"{error_message}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": "TimeoutError",
+            "message": error_message,
+            "context": "cloudwatch_alarms_dashboards_optimization",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)
     except Exception as e:
-        logger.error(f"CloudWatch alarms and dashboards optimization analysis failed: {str(e)}")
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            str(e), "analysis_error", "cloudwatch_alarms_dashboards_optimization"
-        ))
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error(f"CloudWatch alarms and dashboards optimization analysis failed: {str(e)}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": type(e).__name__,
+            "message": str(e),
+            "context": "cloudwatch_alarms_dashboards_optimization",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)
 
 @handle_aws_error
 async def run_cloudwatch_comprehensive_optimization_tool_mcp(arguments: Dict[str, Any]) -> List[TextContent]:
@@ -298,17 +354,31 @@ async def run_cloudwatch_comprehensive_optimization_tool_mcp(arguments: Dict[str
         
         return ResponseFormatter.to_text_content(formatted_result)
         
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as e:
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
         error_message = f"CloudWatch comprehensive optimization analysis timed out after {timeout_seconds} seconds"
-        logger.error(error_message)
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            error_message, "timeout_error", "cloudwatch_comprehensive_optimization"
-        ))
+        logger.error(f"{error_message}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": "TimeoutError",
+            "message": error_message,
+            "context": "cloudwatch_comprehensive_optimization",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)
     except Exception as e:
-        logger.error(f"CloudWatch comprehensive optimization analysis failed: {str(e)}")
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            str(e), "analysis_error", "cloudwatch_comprehensive_optimization"
-        ))
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error(f"CloudWatch comprehensive optimization analysis failed: {str(e)}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": type(e).__name__,
+            "message": str(e),
+            "context": "cloudwatch_comprehensive_optimization",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)
 
 @handle_aws_error
 async def query_cloudwatch_analysis_results_mcp(arguments: Dict[str, Any]) -> List[TextContent]:
@@ -317,22 +387,76 @@ async def query_cloudwatch_analysis_results_mcp(arguments: Dict[str, Any]) -> Li
     start_time = time.time()
     
     try:
-        # Import the sync function from runbook_functions and call it
-        from runbook_functions import query_cloudwatch_analysis_results
+        from playbooks.cloudwatch.optimization_orchestrator import CloudWatchOptimizationOrchestrator
+        from utils.session_manager import get_session_manager
         
-        # Call the existing function and convert to MCP format
-        result = await query_cloudwatch_analysis_results(arguments)
+        region = arguments.get("region")
+        query = arguments.get("query", "SELECT * FROM cloudwatch_analysis_results LIMIT 10")
+        limit = arguments.get("limit", 100)
         
-        execution_time = time.time() - start_time
-        log_function_exit(logger, "query_cloudwatch_analysis_results_mcp", "success", execution_time)
+        # Initialize orchestrator
+        orchestrator = CloudWatchOptimizationOrchestrator(region=region)
         
-        return result
+        # Get session manager and execute query
+        session_manager = get_session_manager()
+        
+        try:
+            # Execute the SQL query on stored results
+            results = session_manager.execute_query(orchestrator.session_id, query)
+            
+            # Limit results if needed
+            if len(results) > limit:
+                results = results[:limit]
+            
+            # Format response
+            formatted_result = ResponseFormatter.success_response(
+                data={
+                    "query": query,
+                    "results": results,
+                    "count": len(results),
+                    "session_id": orchestrator.session_id
+                },
+                message=f"Retrieved {len(results)} CloudWatch analysis results",
+                analysis_type="cloudwatch_query_results"
+            )
+            
+            # Add documentation links
+            formatted_result = add_documentation_links(formatted_result, "cloudwatch")
+            
+            execution_time = time.time() - start_time
+            log_function_exit(logger, "query_cloudwatch_analysis_results_mcp", "success", execution_time)
+            
+            return ResponseFormatter.to_text_content(formatted_result)
+            
+        except Exception as query_error:
+            # If query fails, return helpful error message
+            formatted_result = ResponseFormatter.success_response(
+                data={
+                    "query": query,
+                    "results": [],
+                    "count": 0,
+                    "session_id": orchestrator.session_id,
+                    "note": f"Query execution failed: {str(query_error)}. This may be because no analysis has been run yet in this session."
+                },
+                message="No results found or query failed",
+                analysis_type="cloudwatch_query_results"
+            )
+            
+            formatted_result = add_documentation_links(formatted_result, "cloudwatch")
+            return ResponseFormatter.to_text_content(formatted_result)
         
     except Exception as e:
-        logger.error(f"CloudWatch analysis results query failed: {str(e)}")
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            str(e), "query_error", "cloudwatch_analysis_results"
-        ))
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error(f"CloudWatch analysis results query failed: {str(e)}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": type(e).__name__,
+            "message": str(e),
+            "context": "cloudwatch_analysis_results",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)
 
 @handle_aws_error
 async def validate_cloudwatch_cost_preferences_mcp(arguments: Dict[str, Any]) -> List[TextContent]:
@@ -341,22 +465,44 @@ async def validate_cloudwatch_cost_preferences_mcp(arguments: Dict[str, Any]) ->
     start_time = time.time()
     
     try:
-        # Import the sync function from runbook_functions and call it
-        from runbook_functions import validate_cloudwatch_cost_preferences
+        from playbooks.cloudwatch.optimization_orchestrator import CloudWatchOptimizationOrchestrator
         
-        # Call the existing function and convert to MCP format
-        result = await validate_cloudwatch_cost_preferences(arguments)
+        region = arguments.get("region")
+        cost_preferences = arguments.get("cost_preferences", {})
+        
+        # Initialize orchestrator
+        orchestrator = CloudWatchOptimizationOrchestrator(region=region)
+        
+        # Validate cost preferences using orchestrator method
+        validation_result = orchestrator.validate_cost_preferences(**cost_preferences)
+        
+        # Format response
+        formatted_result = ResponseFormatter.success_response(
+            data=validation_result,
+            message="CloudWatch cost preferences validated successfully",
+            analysis_type="cloudwatch_cost_preferences_validation"
+        )
+        
+        # Add documentation links
+        formatted_result = add_documentation_links(formatted_result, "cloudwatch")
         
         execution_time = time.time() - start_time
         log_function_exit(logger, "validate_cloudwatch_cost_preferences_mcp", "success", execution_time)
         
-        return result
+        return ResponseFormatter.to_text_content(formatted_result)
         
     except Exception as e:
-        logger.error(f"CloudWatch cost preferences validation failed: {str(e)}")
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            str(e), "validation_error", "cloudwatch_cost_preferences"
-        ))
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error(f"CloudWatch cost preferences validation failed: {str(e)}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": type(e).__name__,
+            "message": str(e),
+            "context": "cloudwatch_cost_preferences",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)
 
 @handle_aws_error
 async def get_cloudwatch_cost_estimate_mcp(arguments: Dict[str, Any]) -> List[TextContent]:
@@ -365,19 +511,48 @@ async def get_cloudwatch_cost_estimate_mcp(arguments: Dict[str, Any]) -> List[Te
     start_time = time.time()
     
     try:
-        # Import the sync function from runbook_functions and call it
-        from runbook_functions import get_cloudwatch_cost_estimate
+        from playbooks.cloudwatch.optimization_orchestrator import CloudWatchOptimizationOrchestrator
         
-        # Call the existing function and convert to MCP format
-        result = await get_cloudwatch_cost_estimate(arguments)
+        region = arguments.get("region")
+        analysis_type = arguments.get("analysis_type", "comprehensive")
+        lookback_days = arguments.get("lookback_days", 30)
+        
+        # Initialize orchestrator
+        orchestrator = CloudWatchOptimizationOrchestrator(region=region)
+        
+        # Prepare analysis scope
+        analysis_scope = {
+            'lookback_days': lookback_days,
+            'analysis_types': [analysis_type] if analysis_type != "comprehensive" else ['general_spend', 'logs_optimization', 'metrics_optimization', 'alarms_and_dashboards']
+        }
+        
+        # Get cost estimate using orchestrator method
+        cost_estimate = orchestrator.get_cost_estimate(analysis_scope=analysis_scope, **arguments)
+        
+        # Format response
+        formatted_result = ResponseFormatter.success_response(
+            data=cost_estimate,
+            message=f"CloudWatch cost estimate generated for {analysis_type} analysis",
+            analysis_type="cloudwatch_cost_estimate"
+        )
+        
+        # Add documentation links
+        formatted_result = add_documentation_links(formatted_result, "cloudwatch")
         
         execution_time = time.time() - start_time
         log_function_exit(logger, "get_cloudwatch_cost_estimate_mcp", "success", execution_time)
         
-        return result
+        return ResponseFormatter.to_text_content(formatted_result)
         
     except Exception as e:
-        logger.error(f"CloudWatch cost estimate failed: {str(e)}")
-        return ResponseFormatter.to_text_content(ResponseFormatter.error_response(
-            str(e), "estimation_error", "cloudwatch_cost_estimate"
-        ))
+        import traceback
+        error_traceback = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+        logger.error(f"CloudWatch cost estimate failed: {str(e)}\n{error_traceback}")
+        error_dict = {
+            "status": "error",
+            "error_code": type(e).__name__,
+            "message": str(e),
+            "context": "cloudwatch_cost_estimate",
+            "traceback": error_traceback
+        }
+        return ResponseFormatter.to_text_content(error_dict)

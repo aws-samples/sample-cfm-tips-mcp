@@ -279,17 +279,20 @@ class TestServiceCostConstraints:
             mock_cloudwatch = MagicMock()
             mock_logs = MagicMock()
             mock_ce = MagicMock()
+            mock_pricing = MagicMock()
             
             mock_boto3.client.side_effect = lambda service, **kwargs: {
                 'cloudwatch': mock_cloudwatch,
                 'logs': mock_logs,
-                'ce': mock_ce
+                'ce': mock_ce,
+                'pricing': mock_pricing
             }[service]
             
             yield {
                 'cloudwatch': mock_cloudwatch,
                 'logs': mock_logs,
-                'ce': mock_ce
+                'ce': mock_ce,
+                'pricing': mock_pricing
             }
     
     @pytest.fixture

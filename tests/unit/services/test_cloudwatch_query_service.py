@@ -12,7 +12,6 @@ from unittest.mock import Mock, patch, MagicMock
 
 
 @pytest.mark.unit
-@pytest.mark.cloudwatch
 class TestCloudWatchQueryService:
     """Test CloudWatch SQL query functionality."""
     
@@ -79,7 +78,6 @@ class TestCloudWatchQueryService:
 
 
 @pytest.mark.unit
-@pytest.mark.cloudwatch
 class TestCloudWatchCostPreferences:
     """Test CloudWatch cost preference validation."""
     
@@ -172,7 +170,6 @@ class TestCloudWatchCostPreferences:
 
 
 @pytest.mark.unit
-@pytest.mark.cloudwatch
 class TestCloudWatchCostEstimation:
     """Test CloudWatch cost estimation functionality."""
     
@@ -271,7 +268,6 @@ class TestCloudWatchCostEstimation:
 
 
 @pytest.mark.unit
-@pytest.mark.cloudwatch
 class TestCloudWatchPerformanceAndCache:
     """Test CloudWatch performance statistics and cache management."""
     
@@ -411,7 +407,6 @@ class TestCloudWatchPerformanceAndCache:
 
 
 @pytest.mark.unit
-@pytest.mark.cloudwatch
 class TestCloudWatchUtilityIntegration:
     """Test integration between utility functions."""
     

@@ -22,6 +22,7 @@ async def run_integration_tests():
     base_dir = os.path.dirname(os.path.dirname(__file__))  # Go up to tests directory
     test_modules = [
         ("CloudWatch Integration", os.path.join(base_dir, "integration/cloudwatch/test_cloudwatch_integration.py")),
+        ("Database Savings Plans Integration", os.path.join(base_dir, "integration/rds/test_database_savings_plans_integration.py")),
         # Add other playbooks as they are organized
         # ("EC2 Integration", os.path.join(base_dir, "integration/ec2/test_ec2_integration.py")),
         # ("S3 Integration", os.path.join(base_dir, "integration/s3/test_s3_integration.py")),
