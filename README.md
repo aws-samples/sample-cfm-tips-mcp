@@ -456,10 +456,6 @@ logging                 # Logging (built-in)
 git clone https://github.com/aws-samples/sample-cfm-tips-mcp.git
 cd sample-cfm-tips-mcp
 
-# Create virtual environment (recommended)
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
 # Install dependencies
 pip install -r requirements.txt
 ```
@@ -705,18 +701,6 @@ pip install boto3 botocore mcp
 
 # For M1/M2 Macs with architecture issues:
 pip install --no-binary :all: boto3
-```
-
-#### Virtual Environment Issues
-```bash
-# Create fresh virtual environment
-rm -rf venv
-python3 -m venv venv
-source venv/bin/activate
-
-# Verify virtual environment is active
-which python3
-# Should show path within venv directory
 ```
 
 ### AWS Configuration Issues
