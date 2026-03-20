@@ -1,0 +1,304 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CFM Tips — StackSet for org-wide cross-account role deployment.
+  Deploys CFMTipsReadOnly role to all member accounts in targeted OUs.
+  Run from the management account (or delegated StackSets admin).
+
+  Scaling notes (1000+ accounts):
+  - IAM is global: 1 region × N accounts = N stack instances (well within 100K limit)
+  - MaxConcurrentPercentage: 25 = ~250 parallel deploys, full rollout in ~4 batches
+  - FailureTolerancePercentage: 10 = up to 100 accounts can fail without aborting
+  - AutoDeployment: new accounts joining the OU get the role automatically
+  - Updates roll out incrementally; no downtime for existing roles
+
+Parameters:
+  CfmTipsLambdaRoleArn:
+    Type: String
+    Description: >
+      ARN of the CFM Tips Lambda execution role. Get it with:
+      aws lambda get-function-configuration --function-name <name> --query Role --output text
+    AllowedPattern: "arn:aws:iam::\\d{12}:role/.+"
+
+  TargetOUIds:
+    Type: CommaDelimitedList
+    Description: >
+      Comma-separated list of AWS Organizations OU IDs to deploy to.
+      Example: ou-abc1-12345678,ou-abc1-87654321
+      Use the root OU ID (r-xxxx) to deploy to ALL accounts in the org.
+
+  DelegatedAdminRoleArn:
+    Type: String
+    Default: ""
+    Description: >
+      Optional: ARN of CFMTipsReadOnly in a delegated admin account for
+      org-scoped services (COH, Compute Optimizer). Leave empty if each
+      account is self-enrolled or if using org-level enrollment.
+
+  CallAs:
+    Type: String
+    Default: SELF
+    AllowedValues: [SELF, DELEGATED_ADMIN]
+    Description: >
+      SELF if running from the management account.
+      DELEGATED_ADMIN if running from a delegated StackSets admin account.
+
+Conditions:
+  HasDelegatedAdmin: !Not [!Equals [!Ref DelegatedAdminRoleArn, ""]]
+
+Resources:
+  CfmTipsCrossAccountStackSet:
+    Type: AWS::CloudFormation::StackSet
+    Properties:
+      StackSetName: CFM-Tips-CrossAccount-Role
+      Description: >
+        Deploys CFMTipsReadOnly IAM role to member accounts for
+        cross-account cost optimization analysis via CFM Tips MCP server.
+      PermissionModel: SERVICE_MANAGED
+      CallAs: !Ref CallAs
+      AutoDeployment:
+        Enabled: true
+        RetainStacksOnAccountRemoval: false
+      Capabilities:
+        - CAPABILITY_NAMED_IAM
+      ManagedExecution:
+        Active: true
+      OperationPreferences:
+        MaxConcurrentPercentage: 25
+        FailureTolerancePercentage: 10
+        RegionConcurrencyType: PARALLEL
+      StackInstancesGroup:
+        - DeploymentTargets:
+            OrganizationalUnitIds: !Ref TargetOUIds
+          Regions:
+            - us-east-1
+      TemplateBody: |
+        AWSTemplateFormatVersion: '2010-09-09'
+        Description: CFM Tips cross-account read-only role (deployed via StackSet).
+        Parameters:
+          TrustedPrincipalArn:
+            Type: String
+          DelegatedAdminRoleArn:
+            Type: String
+            Default: ""
+        Conditions:
+          HasDelegatedAdmin: !Not [!Equals [!Ref DelegatedAdminRoleArn, ""]]
+        Resources:
+          CfmTipsReadOnlyRole:
+            Type: AWS::IAM::Role
+            Properties:
+              RoleName: CFMTipsReadOnly
+              Description: Read-only role for CFM Tips cross-account cost optimization.
+              MaxSessionDuration: 3600
+              Tags:
+                - Key: "cfm-tips:role-type"
+                  Value: !If [HasDelegatedAdmin, "member", "standalone"]
+                - Key: "cfm-tips:delegated-admin-role"
+                  Value: !Ref DelegatedAdminRoleArn
+                - Key: project
+                  Value: cfm-tips
+              AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                  - Effect: Allow
+                    Principal:
+                      AWS: !Ref TrustedPrincipalArn
+                    Action: sts:AssumeRole
+                    Condition:
+                      StringEquals:
+                        "sts:ExternalId": cfm-tips-cross-account
+              Policies:
+                - PolicyName: CFMTipsReadOnly
+                  PolicyDocument:
+                    Version: "2012-10-17"
+                    Statement:
+                      - Sid: CostExplorer
+                        Effect: Allow
+                        Action:
+                          - ce:GetCostAndUsage
+                          - ce:GetCostForecast
+                          - ce:GetSavingsPlansUtilization
+                          - ce:GetSavingsPlansCoverage
+                          - ce:GetReservationUtilization
+                          - ce:GetReservationCoverage
+                          - ce:GetUsageReport
+                          - ce:GetCostCategories
+                          - ce:ListCostAllocationTags
+                          - ce:ListCostCategoryDefinitions
+                        Resource: "*"
+                      - Sid: CostOptimizationHub
+                        Effect: Allow
+                        Action:
+                          - cost-optimization-hub:ListEnrollmentStatuses
+                          - cost-optimization-hub:ListRecommendations
+                          - cost-optimization-hub:GetRecommendation
+                          - cost-optimization-hub:ListRecommendationSummaries
+                          - cost-optimization-hub:GetRecommendationSummary
+                          - cost-optimization-hub:GetSavingsPlansRecommendations
+                        Resource: "*"
+                      - Sid: ComputeOptimizer
+                        Effect: Allow
+                        Action:
+                          - compute-optimizer:GetEnrollmentStatus
+                          - compute-optimizer:GetEC2InstanceRecommendations
+                          - compute-optimizer:GetEBSVolumeRecommendations
+                          - compute-optimizer:GetLambdaFunctionRecommendations
+                          - compute-optimizer:GetAutoScalingGroupRecommendations
+                          - compute-optimizer:GetECSServiceRecommendations
+                          - compute-optimizer:GetRecommendationSummaries
+                        Resource: "*"
+                      - Sid: TrustedAdvisor
+                        Effect: Allow
+                        Action:
+                          - trustedadvisor:DescribeCheckItems
+                          - trustedadvisor:DescribeCheckResult
+                          - trustedadvisor:ListChecks
+                          - trustedadvisor:ListRecommendations
+                          - trustedadvisor:GetRecommendation
+                          - support:DescribeTrustedAdvisorChecks
+                          - support:DescribeTrustedAdvisorCheckResult
+                          - support:RefreshTrustedAdvisorCheck
+                          - support:DescribeSeverityLevels
+                        Resource: "*"
+                      - Sid: DescribeResources
+                        Effect: Allow
+                        Action:
+                          - ec2:DescribeInstances
+                          - ec2:DescribeInstanceTypes
+                          - ec2:DescribeInstanceStatus
+                          - ec2:DescribeVolumes
+                          - ec2:DescribeSnapshots
+                          - ec2:DescribeImages
+                          - ec2:DescribeAddresses
+                          - ec2:DescribeNatGateways
+                          - ec2:DescribeRegions
+                          - ec2:DescribeFlowLogs
+                          - ec2:DescribeRouteTables
+                          - ec2:DescribeVpcs
+                          - ec2:DescribeSubnets
+                          - ec2:DescribeCapacityReservations
+                          - ec2:DescribeReservedInstances
+                          - ec2:DescribeReservedInstancesOfferings
+                          - ec2:DescribeSpotInstanceRequests
+                          - ec2:DescribeSpotPriceHistory
+                          - ec2:GetEbsEncryptionByDefault
+                          - ec2:GetEbsDefaultKmsKeyId
+                          - rds:DescribeDBInstances
+                          - rds:DescribeDBClusters
+                          - rds:DescribeDBSnapshots
+                          - rds:DescribeDBClusterSnapshots
+                          - rds:DescribeReservedDBInstances
+                          - rds:DescribeReservedDBInstancesOfferings
+                          - lambda:ListFunctions
+                          - lambda:GetFunction
+                          - lambda:GetFunctionConfiguration
+                          - lambda:ListTags
+                          - lambda:ListProvisionedConcurrencyConfigs
+                          - s3:ListAllMyBuckets
+                          - s3:GetBucketLocation
+                          - s3:ListBucket
+                          - s3:ListObjectsV2
+                          - s3:GetBucketTagging
+                          - s3:GetBucketLifecycleConfiguration
+                          - s3:GetBucketVersioning
+                          - s3:GetBucketEncryption
+                          - s3:ListMultipartUploads
+                          - s3:GetBucketPolicy
+                          - s3:GetBucketAcl
+                          - s3:GetPublicAccessBlock
+                          - s3:GetBucketNotification
+                          - s3:GetAnalyticsConfiguration
+                          - s3:GetInventoryConfiguration
+                        Resource: "*"
+                      - Sid: CloudWatch
+                        Effect: Allow
+                        Action:
+                          - cloudwatch:GetMetricStatistics
+                          - cloudwatch:GetMetricData
+                          - cloudwatch:ListMetrics
+                          - cloudwatch:DescribeAlarms
+                          - cloudwatch:DescribeAlarmsForMetric
+                          - cloudwatch:ListDashboards
+                          - cloudwatch:GetDashboard
+                          - logs:DescribeLogGroups
+                          - logs:DescribeLogStreams
+                          - logs:DescribeMetricFilters
+                          - logs:GetLogGroupFields
+                          - logs:ListLogAnomalyDetectors
+                          - logs:ListAnomalies
+                        Resource: "*"
+                      - Sid: PerformanceInsights
+                        Effect: Allow
+                        Action:
+                          - pi:GetResourceMetrics
+                          - pi:DescribeDimensionKeys
+                          - pi:GetDimensionKeyDetails
+                          - pi:ListAvailableResourceMetrics
+                        Resource: "*"
+                      - Sid: Pricing
+                        Effect: Allow
+                        Action:
+                          - pricing:GetProducts
+                          - pricing:DescribeServices
+                          - pricing:GetAttributeValues
+                        Resource: "*"
+                      - Sid: CloudTrail
+                        Effect: Allow
+                        Action:
+                          - cloudtrail:DescribeTrails
+                          - cloudtrail:ListTrails
+                          - cloudtrail:GetTrail
+                          - cloudtrail:GetTrailStatus
+                          - cloudtrail:GetEventSelectors
+                          - cloudtrail:GetInsightSelectors
+                          - cloudtrail:LookupEvents
+                        Resource: "*"
+                      - Sid: StorageLens
+                        Effect: Allow
+                        Action:
+                          - s3:ListStorageLensConfigurations
+                          - s3:GetStorageLensDashboard
+                          - s3:GetStorageLensConfiguration
+                          - s3control:ListStorageLensConfigurations
+                          - s3control:GetStorageLensConfiguration
+                        Resource: "*"
+                      - Sid: SavingsPlans
+                        Effect: Allow
+                        Action:
+                          - savingsplans:DescribeSavingsPlans
+                          - savingsplans:DescribeSavingsPlansOfferingRates
+                          - savingsplans:DescribeSavingsPlansOfferings
+                        Resource: "*"
+                      - Sid: STS
+                        Effect: Allow
+                        Action:
+                          - sts:GetCallerIdentity
+                        Resource: "*"
+                      - Sid: IAMRoleTags
+                        Effect: Allow
+                        Action:
+                          - iam:ListRoleTags
+                        Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/CFMTipsReadOnly"
+        Outputs:
+          RoleArn:
+            Value: !GetAtt CfmTipsReadOnlyRole.Arn
+      Parameters:
+        - ParameterKey: TrustedPrincipalArn
+          ParameterValue: !Ref CfmTipsLambdaRoleArn
+        - ParameterKey: DelegatedAdminRoleArn
+          ParameterValue: !Ref DelegatedAdminRoleArn
+
+Outputs:
+  StackSetId:
+    Description: StackSet ID for monitoring deployment progress.
+    Value: !Ref CfmTipsCrossAccountStackSet
+  StackSetArn:
+    Description: StackSet ARN.
+    Value: !GetAtt CfmTipsCrossAccountStackSet.StackSetId
+  DeploymentCommand:
+    Description: Monitor deployment progress with this command.
+    Value: !Sub >-
+      aws cloudformation list-stack-instances
+      --stack-set-name CFM-Tips-CrossAccount-Role
+      --call-as ${CallAs}
+      --query 'Summaries[].{Account:Account,Status:StackInstanceStatus.DetailedStatus}'
+      --output table

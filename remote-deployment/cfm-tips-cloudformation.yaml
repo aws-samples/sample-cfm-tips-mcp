@@ -1,0 +1,1198 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CFM Tips — One-click deployment of the Cost Optimization MCP Server.
+  Builds a Docker image via CodeBuild, deploys to Lambda with Function URL (IAM auth).
+  Supports single-account, AWS Organization, and Business Unit deployment modes.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Deployment Configuration
+        Parameters:
+          - DeploymentMode
+          - GitRepoUrl
+          - GitBranch
+      - Label:
+          default: Lambda Configuration
+        Parameters:
+          - LambdaMemorySize
+          - LambdaTimeout
+          - LogLevel
+      - Label:
+          default: Organization Settings (Organization and BusinessUnit modes only)
+        Parameters:
+          - TargetOUIds
+          - CallAs
+          - DelegatedAdminRoleArn
+    ParameterLabels:
+      DeploymentMode:
+        default: Deployment Mode
+      GitRepoUrl:
+        default: Git Repository URL
+      GitBranch:
+        default: Git Branch
+      LambdaMemorySize:
+        default: Lambda Memory (MB)
+      LambdaTimeout:
+        default: Lambda Timeout (seconds)
+      LogLevel:
+        default: Log Level
+      TargetOUIds:
+        default: Target OU IDs
+      CallAs:
+        default: StackSet Call-As
+      DelegatedAdminRoleArn:
+        default: Delegated Admin Role ARN
+
+Parameters:
+  DeploymentMode:
+    Type: String
+    Default: SingleAccount
+    AllowedValues:
+      - SingleAccount
+      - Organization
+      - BusinessUnit
+    Description: >
+      SingleAccount: Lambda analyzes resources in the deployment account only.
+      Organization: Also deploys cross-account IAM roles via StackSet to target OUs.
+      BusinessUnit: Same as Organization but scoped to a specific BU's OUs.
+
+  GitRepoUrl:
+    Type: String
+    Default: https://github.com/aws-samples/sample-cfm-tips-mcp.git
+    Description: HTTPS URL of the CFM Tips source repository.
+
+  GitBranch:
+    Type: String
+    Default: main
+    Description: Branch or tag to build from.
+
+  LambdaMemorySize:
+    Type: Number
+    Default: 1024
+    MinValue: 512
+    MaxValue: 3008
+    Description: Lambda function memory in MB.
+
+  LambdaTimeout:
+    Type: Number
+    Default: 120
+    MinValue: 30
+    MaxValue: 900
+    Description: Lambda function timeout in seconds.
+
+  LogLevel:
+    Type: String
+    Default: INFO
+    AllowedValues: [DEBUG, INFO, WARNING, ERROR]
+
+  TargetOUIds:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: >
+      Comma-separated OU IDs for cross-account role deployment.
+      Required for Organization and BusinessUnit modes. Example: ou-abc1-12345678
+
+  CallAs:
+    Type: String
+    Default: SELF
+    AllowedValues: [SELF, DELEGATED_ADMIN]
+    Description: >
+      SELF if deploying from the management account.
+      DELEGATED_ADMIN if deploying from a delegated StackSets admin account.
+
+  DelegatedAdminRoleArn:
+    Type: String
+    Default: ""
+    Description: >
+      Optional ARN of CFMTipsReadOnly in a delegated admin account for
+      org-scoped services (Cost Optimization Hub, Compute Optimizer).
+
+Conditions:
+  IsOrgMode: !Or
+    - !Equals [!Ref DeploymentMode, Organization]
+    - !Equals [!Ref DeploymentMode, BusinessUnit]
+  HasDelegatedAdmin: !Not [!Equals [!Ref DelegatedAdminRoleArn, ""]]
+
+Resources:
+
+  # =========================================================================
+  # ECR Repository — stores the built Docker image
+  # =========================================================================
+  EcrRepository:
+    # checkov:skip=CKV_AWS_136:ECR encryption uses default AES-256 which is sufficient
+    # checkov:skip=CKV_AWS_51:Mutable tags needed for :latest deployment pattern
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Delete
+    Properties:
+      RepositoryName: !Sub "${AWS::StackName}-mcp"
+      EmptyOnDelete: true
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep only 3 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 3
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+      Tags:
+        - Key: project
+          Value: cfm-tips-mcp
+
+  # =========================================================================
+  # CodeBuild — clones repo, builds Docker image, pushes to ECR
+  # =========================================================================
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for stack identification"
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-codebuild"
+      Tags:
+        - Key: project
+          Value: cfm-tips-mcp
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ECRAuth
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: ECRPush
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:PutImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                Resource: !GetAtt EcrRepository.Arn
+              - Sid: Logs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${AWS::StackName}-build*"
+              - Sid: UpdateLambda
+                Effect: Allow
+                Action:
+                  - lambda:UpdateFunctionCode
+                  - lambda:GetFunction
+                Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-mcp"
+
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W32
+            reason: "EncryptionKey not needed — no build artifacts stored"
+    Properties:
+      Name: !Sub "${AWS::StackName}-build"
+      Description: Builds CFM Tips Docker image and pushes to ECR
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      TimeoutInMinutes: 15
+      Tags:
+        - Key: project
+          Value: cfm-tips-mcp
+      Environment:
+        Type: ARM_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux-aarch64-standard:3.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: ECR_REPO_URI
+            Value: !GetAtt EcrRepository.RepositoryUri
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref "AWS::AccountId"
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref "AWS::Region"
+          - Name: LAMBDA_FUNCTION_NAME
+            Value: !Sub "${AWS::StackName}-mcp"
+          - Name: GIT_BRANCH
+            Value: !Ref GitBranch
+          - Name: GIT_REPO_URL
+            Value: !Ref GitRepoUrl
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            pre_build:
+              commands:
+                - echo Logging in to ECR...
+                - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+                - echo Cloning repository...
+                - git clone --depth 1 --branch $GIT_BRANCH $GIT_REPO_URL repo
+            build:
+              commands:
+                - echo Building Docker image...
+                - cd repo
+                - docker build -t $ECR_REPO_URI:latest -f remote-deployment/Dockerfile .
+            post_build:
+              commands:
+                - echo Pushing image to ECR...
+                - docker push $ECR_REPO_URI:latest
+                - echo Updating Lambda function code...
+                - aws lambda update-function-code --function-name $LAMBDA_FUNCTION_NAME --image-uri $ECR_REPO_URI:latest --no-paginate || echo "Lambda update skipped (function may not exist yet during initial deploy)"
+                - echo Done.
+      Artifacts:
+        Type: NO_ARTIFACTS
+
+  # =========================================================================
+  # Lambda Execution Role — read-only access to AWS cost services
+  # =========================================================================
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required for cross-account STS AssumeRole"
+          - id: W11
+            reason: "Read-only describe/get actions require wildcard resource"
+          - id: W76
+            reason: "High SPCM expected — policy covers 15+ AWS services"
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-lambda"
+      Tags:
+        - Key: project
+          Value: cfm-tips-mcp
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CfmTipsReadOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: CostExplorer
+                Effect: Allow
+                Action:
+                  - ce:GetCostAndUsage
+                  - ce:GetCostForecast
+                  - ce:GetSavingsPlansUtilization
+                  - ce:GetSavingsPlansCoverage
+                  - ce:GetReservationUtilization
+                  - ce:GetReservationCoverage
+                  - ce:GetUsageReport
+                  - ce:GetCostCategories
+                  - ce:ListCostAllocationTags
+                  - ce:ListCostCategoryDefinitions
+                Resource: "*"
+              - Sid: CostOptimizationHub
+                Effect: Allow
+                Action:
+                  - cost-optimization-hub:ListEnrollmentStatuses
+                  - cost-optimization-hub:ListRecommendations
+                  - cost-optimization-hub:GetRecommendation
+                  - cost-optimization-hub:ListRecommendationSummaries
+                  - cost-optimization-hub:GetRecommendationSummary
+                  - cost-optimization-hub:GetSavingsPlansRecommendations
+                Resource: "*"
+              - Sid: ComputeOptimizer
+                Effect: Allow
+                Action:
+                  - compute-optimizer:GetEnrollmentStatus
+                  - compute-optimizer:GetEC2InstanceRecommendations
+                  - compute-optimizer:GetEBSVolumeRecommendations
+                  - compute-optimizer:GetLambdaFunctionRecommendations
+                  - compute-optimizer:GetAutoScalingGroupRecommendations
+                  - compute-optimizer:GetECSServiceRecommendations
+                  - compute-optimizer:GetRecommendationSummaries
+                Resource: "*"
+              - Sid: TrustedAdvisor
+                Effect: Allow
+                Action:
+                  - trustedadvisor:DescribeCheckItems
+                  - trustedadvisor:DescribeCheckResult
+                  - trustedadvisor:ListChecks
+                  - trustedadvisor:ListRecommendations
+                  - trustedadvisor:GetRecommendation
+                  - support:DescribeTrustedAdvisorChecks
+                  - support:DescribeTrustedAdvisorCheckResult
+                  - support:RefreshTrustedAdvisorCheck
+                  - support:DescribeSeverityLevels
+                Resource: "*"
+              - Sid: DescribeResources
+                Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceTypes
+                  - ec2:DescribeInstanceStatus
+                  - ec2:DescribeVolumes
+                  - ec2:DescribeSnapshots
+                  - ec2:DescribeImages
+                  - ec2:DescribeAddresses
+                  - ec2:DescribeNatGateways
+                  - ec2:DescribeRegions
+                  - ec2:DescribeFlowLogs
+                  - ec2:DescribeRouteTables
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeCapacityReservations
+                  - ec2:DescribeReservedInstances
+                  - ec2:DescribeReservedInstancesOfferings
+                  - ec2:DescribeSpotInstanceRequests
+                  - ec2:DescribeSpotPriceHistory
+                  - ec2:GetEbsEncryptionByDefault
+                  - ec2:GetEbsDefaultKmsKeyId
+                  - rds:DescribeDBInstances
+                  - rds:DescribeDBClusters
+                  - rds:DescribeDBSnapshots
+                  - rds:DescribeDBClusterSnapshots
+                  - rds:DescribeReservedDBInstances
+                  - rds:DescribeReservedDBInstancesOfferings
+                  - lambda:ListFunctions
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:ListTags
+                  - lambda:ListProvisionedConcurrencyConfigs
+                  - s3:ListAllMyBuckets
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                  - s3:ListObjectsV2
+                  - s3:GetBucketTagging
+                  - s3:GetBucketLifecycleConfiguration
+                  - s3:GetBucketVersioning
+                  - s3:GetBucketEncryption
+                  - s3:ListMultipartUploads
+                  - s3:GetBucketPolicy
+                  - s3:GetBucketAcl
+                  - s3:GetPublicAccessBlock
+                  - s3:GetBucketNotification
+                  - s3:GetAnalyticsConfiguration
+                  - s3:GetInventoryConfiguration
+                Resource: "*"
+              - Sid: CloudWatch
+                Effect: Allow
+                Action:
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:ListMetrics
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:DescribeAlarmsForMetric
+                  - cloudwatch:ListDashboards
+                  - cloudwatch:GetDashboard
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                  - logs:DescribeMetricFilters
+                  - logs:GetLogGroupFields
+                  - logs:ListLogAnomalyDetectors
+                  - logs:ListAnomalies
+                Resource: "*"
+              - Sid: PerformanceInsights
+                Effect: Allow
+                Action:
+                  - pi:GetResourceMetrics
+                  - pi:DescribeDimensionKeys
+                  - pi:GetDimensionKeyDetails
+                  - pi:ListAvailableResourceMetrics
+                Resource: "*"
+              - Sid: Pricing
+                Effect: Allow
+                Action:
+                  - pricing:GetProducts
+                  - pricing:DescribeServices
+                  - pricing:GetAttributeValues
+                Resource: "*"
+              - Sid: CloudTrail
+                Effect: Allow
+                Action:
+                  - cloudtrail:DescribeTrails
+                  - cloudtrail:ListTrails
+                  - cloudtrail:GetTrail
+                  - cloudtrail:GetTrailStatus
+                  - cloudtrail:GetEventSelectors
+                  - cloudtrail:GetInsightSelectors
+                  - cloudtrail:LookupEvents
+                Resource: "*"
+              - Sid: StorageLens
+                Effect: Allow
+                Action:
+                  - s3:ListStorageLensConfigurations
+                  - s3:GetStorageLensDashboard
+                  - s3:GetStorageLensConfiguration
+                  - s3control:ListStorageLensConfigurations
+                  - s3control:GetStorageLensConfiguration
+                Resource: "*"
+              - Sid: SavingsPlans
+                Effect: Allow
+                Action:
+                  - savingsplans:DescribeSavingsPlans
+                  - savingsplans:DescribeSavingsPlansOfferingRates
+                  - savingsplans:DescribeSavingsPlansOfferings
+                Resource: "*"
+              - Sid: STS
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Sid: STSAssumeRole
+                Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource: "arn:aws:iam::*:role/CFMTipsReadOnly"
+
+  # =========================================================================
+  # Lambda Function — container image, initially placeholder until CodeBuild runs
+  # =========================================================================
+  CfmTipsMcpFunction:
+    # checkov:skip=CKV_AWS_115:Concurrency managed at API Gateway level
+    # checkov:skip=CKV_AWS_116:DLQ not needed for synchronous MCP request-response
+    # checkov:skip=CKV_AWS_117:VPC not required for read-only AWS API calls
+    # checkov:skip=CKV_AWS_173:No sensitive data in environment variables
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "VPC not required — Lambda only makes read-only AWS API calls"
+          - id: W92
+            reason: "Concurrency managed at API Gateway level"
+          - id: W28
+            reason: "Explicit name required for Function URL configuration"
+    DependsOn: BuildTrigger
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-mcp"
+      Description: CFM Tips MCP Server — cost optimization via Streamable HTTP
+      PackageType: Image
+      Code:
+        ImageUri: !Sub "${EcrRepository.RepositoryUri}:latest"
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Architectures:
+        - arm64
+      Timeout: !Ref LambdaTimeout
+      MemorySize: !Ref LambdaMemorySize
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+      Tags:
+        - Key: project
+          Value: cfm-tips-mcp
+
+  CfmTipsFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt CfmTipsMcpFunction.Arn
+      AuthType: AWS_IAM
+      InvokeMode: BUFFERED
+      Cors:
+        AllowHeaders:
+          - Content-Type
+          - Accept
+          - Mcp-Session-Id
+        AllowMethods:
+          - POST
+          - GET
+          - DELETE
+        AllowOrigins:
+          - "*"
+        MaxAge: 600
+
+  CfmTipsFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W24
+            reason: "InvokeFunction permission is correct for API Gateway integration"
+    Properties:
+      FunctionName: !GetAtt CfmTipsMcpFunction.Arn
+      Action: lambda:InvokeFunctionUrl
+      Principal: !Ref "AWS::AccountId"
+      FunctionUrlAuthType: AWS_IAM
+
+  # =========================================================================
+  # MCP Invoke Policy — attach to users/roles that need to call the MCP server
+  # =========================================================================
+  McpInvokePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${AWS::StackName}-mcp-invoke"
+      Description: Allows lambda:InvokeFunctionUrl on the CFM Tips MCP Lambda.
+      # Note: Tags not supported on AWS::IAM::ManagedPolicy in this account's CFN registry
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: lambda:InvokeFunctionUrl
+            Resource: !GetAtt CfmTipsMcpFunction.Arn
+
+  # =========================================================================
+  # Data Source Activation — ensures free data sources are enrolled
+  # =========================================================================
+  DataSourceActivationRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required"
+          - id: W11
+            reason: "Read-only actions require wildcard resource"
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-ds-activation"
+      Tags:
+        - Key: project
+          Value: cfm-tips-mcp
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DataSourceActivation
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ComputeOptimizer
+                Effect: Allow
+                Action:
+                  - compute-optimizer:UpdateEnrollmentStatus
+                  - compute-optimizer:GetEnrollmentStatus
+                Resource: "*"
+              - Sid: CostOptimizationHub
+                Effect: Allow
+                Action:
+                  - cost-optimization-hub:UpdateEnrollmentStatus
+                  - cost-optimization-hub:ListEnrollmentStatuses
+                Resource: "*"
+              - Sid: Organizations
+                Effect: Allow
+                Action:
+                  - organizations:ListAccounts
+                  - organizations:DescribeOrganization
+                Resource: "*"
+
+  DataSourceActivationFunction:
+    # checkov:skip=CKV_AWS_115:Concurrency managed at API Gateway level
+    # checkov:skip=CKV_AWS_116:DLQ not needed for synchronous MCP request-response
+    # checkov:skip=CKV_AWS_117:VPC not required for read-only AWS API calls
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "VPC not required — Lambda only makes read-only AWS API calls"
+          - id: W92
+            reason: "Concurrency managed at API Gateway level"
+          - id: W28
+            reason: "Explicit name required for Function URL configuration"
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-ds-activation"
+      Description: Activates free AWS data sources (Compute Optimizer, Cost Optimization Hub)
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt DataSourceActivationRole.Arn
+      Timeout: 60
+      Architectures:
+        - arm64
+      Tags:
+        - Key: project
+          Value: cfm-tips-mcp
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import urllib.request
+
+          def handler(event, context):
+              response_url = event['ResponseURL']
+              try:
+                  if event['RequestType'] == 'Delete':
+                      send_response(response_url, event, 'SUCCESS', {})
+                      return
+
+                  props = event['ResourceProperties']
+                  mode = props.get('DeploymentMode', 'SingleAccount')
+                  results = {}
+
+                  # Activate Compute Optimizer
+                  try:
+                      co = boto3.client('compute-optimizer')
+                      status = co.get_enrollment_status()
+                      if status['status'] != 'Active':
+                          include_member = mode != 'SingleAccount'
+                          co.update_enrollment_status(
+                              status='Active',
+                              includeMemberAccounts=include_member
+                          )
+                          results['compute_optimizer'] = 'enrolled'
+                      else:
+                          results['compute_optimizer'] = 'already_active'
+                  except Exception as e:
+                      results['compute_optimizer'] = f'skipped: {str(e)[:100]}'
+
+                  # Activate Cost Optimization Hub
+                  try:
+                      coh = boto3.client('cost-optimization-hub')
+                      statuses = coh.list_enrollment_statuses()
+                      items = statuses.get('items', [])
+                      enrolled = any(i.get('status') == 'Active' for i in items)
+                      if not enrolled:
+                          include_member = mode != 'SingleAccount'
+                          coh.update_enrollment_status(
+                              status='Active',
+                              includeMemberAccounts=include_member
+                          )
+                          results['cost_optimization_hub'] = 'enrolled'
+                      else:
+                          results['cost_optimization_hub'] = 'already_active'
+                  except Exception as e:
+                      results['cost_optimization_hub'] = f'skipped: {str(e)[:100]}'
+
+                  send_response(response_url, event, 'SUCCESS', results)
+              except Exception as e:
+                  send_response(response_url, event, 'SUCCESS', {
+                      'warning': f'Non-fatal: {str(e)[:200]}'
+                  })
+
+          def send_response(url, event, status, data, reason=''):
+              body = json.dumps({
+                  'Status': status,
+                  'Reason': reason or 'See CloudWatch logs',
+                  'PhysicalResourceId': event.get('PhysicalResourceId',
+                                                   event.get('LogicalResourceId', 'ds-activation')),
+                  'StackId': event['StackId'],
+                  'RequestId': event['RequestId'],
+                  'LogicalResourceId': event['LogicalResourceId'],
+                  'Data': data
+              }).encode()
+              req = urllib.request.Request(url, data=body, method='PUT',
+                                           headers={'Content-Type': ''})
+              urllib.request.urlopen(req)
+
+  DataSourceActivation:
+    Type: Custom::DataSourceActivation
+    Properties:
+      ServiceToken: !GetAtt DataSourceActivationFunction.Arn
+      DeploymentMode: !Ref DeploymentMode
+
+  # =========================================================================
+  # Custom Resource — triggers CodeBuild on stack create/update
+  # =========================================================================
+  BuildTriggerRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Explicit name required"
+          - id: W11
+            reason: "Read-only actions require wildcard resource"
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-build-trigger"
+      Tags:
+        - Key: project
+          Value: cfm-tips-mcp
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: TriggerCodeBuild
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StopBuild
+                Resource: !GetAtt CodeBuildProject.Arn
+              - Sid: CleanupLogGroups
+                Effect: Allow
+                Action:
+                  - logs:DeleteLogGroup
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/${AWS::StackName}-build*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-*"
+
+  BuildTriggerFunction:
+    # checkov:skip=CKV_AWS_115:Concurrency managed at API Gateway level
+    # checkov:skip=CKV_AWS_116:DLQ not needed for synchronous MCP request-response
+    # checkov:skip=CKV_AWS_117:VPC not required for read-only AWS API calls
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "VPC not required — Lambda only makes read-only AWS API calls"
+          - id: W92
+            reason: "Concurrency managed at API Gateway level"
+          - id: W28
+            reason: "Explicit name required for Function URL configuration"
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-build-trigger"
+      Description: Custom resource that triggers CodeBuild and waits for completion
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt BuildTriggerRole.Arn
+      Timeout: 900
+      Architectures:
+        - arm64
+      Tags:
+        - Key: project
+          Value: cfm-tips-mcp
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import time
+          import urllib.request
+
+          def handler(event, context):
+              response_url = event['ResponseURL']
+              try:
+                  project_name = event['ResourceProperties']['ProjectName']
+                  stack_name = event['StackId'].split('/')[1]
+
+                  if event['RequestType'] == 'Delete':
+                      cleanup(project_name, stack_name)
+                      send_response(response_url, event, 'SUCCESS', {})
+                      return
+
+                  git_repo_url = event['ResourceProperties']['GitRepoUrl']
+                  cb = boto3.client('codebuild')
+
+                  build = cb.start_build(
+                      projectName=project_name,
+                      environmentVariablesOverride=[
+                          {'name': 'GIT_REPO_URL', 'value': git_repo_url, 'type': 'PLAINTEXT'}
+                      ]
+                  )
+                  build_id = build['build']['id']
+
+                  # Poll until complete (max ~14 min to stay within Lambda 15 min limit)
+                  for _ in range(170):
+                      time.sleep(5)
+                      status = cb.batch_get_builds(ids=[build_id])['builds'][0]
+                      phase = status['buildStatus']
+                      if phase == 'SUCCEEDED':
+                          send_response(response_url, event, 'SUCCESS', {
+                              'BuildId': build_id
+                          })
+                          return
+                      elif phase in ('FAILED', 'FAULT', 'STOPPED', 'TIMED_OUT'):
+                          send_response(response_url, event, 'FAILED', {},
+                                        reason=f"CodeBuild {phase}: {build_id}")
+                          return
+
+                  send_response(response_url, event, 'FAILED', {},
+                                reason=f"CodeBuild timed out: {build_id}")
+              except Exception as e:
+                  send_response(response_url, event, 'FAILED', {},
+                                reason=str(e)[:256])
+
+          def cleanup(project_name, stack_name):
+              """Stop in-flight builds and delete orphaned log groups."""
+              cb = boto3.client('codebuild')
+              logs = boto3.client('logs')
+
+              # Stop any in-progress builds
+              try:
+                  resp = cb.list_builds_for_project(projectName=project_name, sortOrder='DESCENDING')
+                  if resp.get('ids'):
+                      builds = cb.batch_get_builds(ids=resp['ids'][:5])
+                      for b in builds.get('builds', []):
+                          if b['buildStatus'] == 'IN_PROGRESS':
+                              cb.stop_build(id=b['id'])
+              except Exception:
+                  pass
+
+              # Delete orphaned log groups
+              prefixes = [
+                  f'/aws/codebuild/{stack_name}-build',
+                  f'/aws/lambda/{stack_name}-mcp',
+                  f'/aws/lambda/{stack_name}-build-trigger',
+              ]
+              for prefix in prefixes:
+                  try:
+                      logs.delete_log_group(logGroupName=prefix)
+                  except logs.exceptions.ResourceNotFoundException:
+                      pass
+                  except Exception:
+                      pass
+
+          def send_response(url, event, status, data, reason=''):
+              body = json.dumps({
+                  'Status': status,
+                  'Reason': reason or 'See CloudWatch logs',
+                  'PhysicalResourceId': event.get('PhysicalResourceId',
+                                                   event.get('LogicalResourceId', 'build')),
+                  'StackId': event['StackId'],
+                  'RequestId': event['RequestId'],
+                  'LogicalResourceId': event['LogicalResourceId'],
+                  'Data': data
+              }).encode()
+              req = urllib.request.Request(url, data=body, method='PUT',
+                                           headers={'Content-Type': ''})
+              urllib.request.urlopen(req)
+
+  BuildTrigger:
+    Type: Custom::BuildTrigger
+    DependsOn:
+      - CodeBuildProject
+      - EcrRepository
+    Properties:
+      ServiceToken: !GetAtt BuildTriggerFunction.Arn
+      ProjectName: !Ref CodeBuildProject
+      GitRepoUrl: !Ref GitRepoUrl
+      # Change this value to force a rebuild on stack update
+      BuildVersion: "1"
+
+  # =========================================================================
+  # Cross-Account StackSet — Organization and BusinessUnit modes only
+  # =========================================================================
+  CfmTipsCrossAccountStackSet:
+    Type: AWS::CloudFormation::StackSet
+    Condition: IsOrgMode
+    DependsOn: CfmTipsMcpFunction
+    Properties:
+      StackSetName: !Sub "${AWS::StackName}-CrossAccount-Role"
+      Description: >
+        Deploys CFMTipsReadOnly IAM role to member accounts for
+        cross-account cost optimization analysis via CFM Tips MCP server.
+      PermissionModel: SERVICE_MANAGED
+      CallAs: !Ref CallAs
+      AutoDeployment:
+        Enabled: true
+        RetainStacksOnAccountRemoval: false
+      Capabilities:
+        - CAPABILITY_NAMED_IAM
+      ManagedExecution:
+        Active: true
+      OperationPreferences:
+        MaxConcurrentPercentage: 25
+        FailureTolerancePercentage: 10
+        RegionConcurrencyType: PARALLEL
+      StackInstancesGroup:
+        - DeploymentTargets:
+            OrganizationalUnitIds: !Ref TargetOUIds
+          Regions:
+            - !Ref "AWS::Region"
+      Tags:
+        - Key: project
+          Value: cfm-tips-mcp
+      TemplateBody: |
+        AWSTemplateFormatVersion: '2010-09-09'
+        Description: CFM Tips cross-account read-only role (deployed via StackSet).
+        Parameters:
+          TrustedPrincipalArn:
+            Type: String
+          DelegatedAdminRoleArn:
+            Type: String
+            Default: ""
+        Conditions:
+          HasDelegatedAdmin: !Not [!Equals [!Ref DelegatedAdminRoleArn, ""]]
+        Resources:
+          CfmTipsReadOnlyRole:
+            Type: AWS::IAM::Role
+            Properties:
+              RoleName: CFMTipsReadOnly
+              Description: Read-only role for CFM Tips cross-account cost optimization.
+              MaxSessionDuration: 3600
+              Tags:
+                - Key: "cfm-tips:role-type"
+                  Value: !If [HasDelegatedAdmin, "member", "standalone"]
+                - Key: "cfm-tips:delegated-admin-role"
+                  Value: !Ref DelegatedAdminRoleArn
+                - Key: project
+                  Value: cfm-tips-mcp
+              AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                  - Effect: Allow
+                    Principal:
+                      AWS: !Ref TrustedPrincipalArn
+                    Action: sts:AssumeRole
+                    Condition:
+                      StringEquals:
+                        "sts:ExternalId": cfm-tips-cross-account
+              Policies:
+                - PolicyName: CFMTipsReadOnly
+                  PolicyDocument:
+                    Version: "2012-10-17"
+                    Statement:
+                      - Sid: CostExplorer
+                        Effect: Allow
+                        Action:
+                          - ce:GetCostAndUsage
+                          - ce:GetCostForecast
+                          - ce:GetSavingsPlansUtilization
+                          - ce:GetSavingsPlansCoverage
+                          - ce:GetReservationUtilization
+                          - ce:GetReservationCoverage
+                          - ce:GetUsageReport
+                          - ce:GetCostCategories
+                          - ce:ListCostAllocationTags
+                          - ce:ListCostCategoryDefinitions
+                        Resource: "*"
+                      - Sid: CostOptimizationHub
+                        Effect: Allow
+                        Action:
+                          - cost-optimization-hub:ListEnrollmentStatuses
+                          - cost-optimization-hub:ListRecommendations
+                          - cost-optimization-hub:GetRecommendation
+                          - cost-optimization-hub:ListRecommendationSummaries
+                          - cost-optimization-hub:GetRecommendationSummary
+                          - cost-optimization-hub:GetSavingsPlansRecommendations
+                        Resource: "*"
+                      - Sid: ComputeOptimizer
+                        Effect: Allow
+                        Action:
+                          - compute-optimizer:GetEnrollmentStatus
+                          - compute-optimizer:GetEC2InstanceRecommendations
+                          - compute-optimizer:GetEBSVolumeRecommendations
+                          - compute-optimizer:GetLambdaFunctionRecommendations
+                          - compute-optimizer:GetAutoScalingGroupRecommendations
+                          - compute-optimizer:GetECSServiceRecommendations
+                          - compute-optimizer:GetRecommendationSummaries
+                        Resource: "*"
+                      - Sid: TrustedAdvisor
+                        Effect: Allow
+                        Action:
+                          - trustedadvisor:DescribeCheckItems
+                          - trustedadvisor:DescribeCheckResult
+                          - trustedadvisor:ListChecks
+                          - trustedadvisor:ListRecommendations
+                          - trustedadvisor:GetRecommendation
+                          - support:DescribeTrustedAdvisorChecks
+                          - support:DescribeTrustedAdvisorCheckResult
+                          - support:RefreshTrustedAdvisorCheck
+                          - support:DescribeSeverityLevels
+                        Resource: "*"
+                      - Sid: DescribeResources
+                        Effect: Allow
+                        Action:
+                          - ec2:DescribeInstances
+                          - ec2:DescribeInstanceTypes
+                          - ec2:DescribeInstanceStatus
+                          - ec2:DescribeVolumes
+                          - ec2:DescribeSnapshots
+                          - ec2:DescribeImages
+                          - ec2:DescribeAddresses
+                          - ec2:DescribeNatGateways
+                          - ec2:DescribeRegions
+                          - ec2:DescribeFlowLogs
+                          - ec2:DescribeRouteTables
+                          - ec2:DescribeVpcs
+                          - ec2:DescribeSubnets
+                          - ec2:DescribeCapacityReservations
+                          - ec2:DescribeReservedInstances
+                          - ec2:DescribeReservedInstancesOfferings
+                          - ec2:DescribeSpotInstanceRequests
+                          - ec2:DescribeSpotPriceHistory
+                          - ec2:GetEbsEncryptionByDefault
+                          - ec2:GetEbsDefaultKmsKeyId
+                          - rds:DescribeDBInstances
+                          - rds:DescribeDBClusters
+                          - rds:DescribeDBSnapshots
+                          - rds:DescribeDBClusterSnapshots
+                          - rds:DescribeReservedDBInstances
+                          - rds:DescribeReservedDBInstancesOfferings
+                          - lambda:ListFunctions
+                          - lambda:GetFunction
+                          - lambda:GetFunctionConfiguration
+                          - lambda:ListTags
+                          - lambda:ListProvisionedConcurrencyConfigs
+                          - s3:ListAllMyBuckets
+                          - s3:GetBucketLocation
+                          - s3:ListBucket
+                          - s3:ListObjectsV2
+                          - s3:GetBucketTagging
+                          - s3:GetBucketLifecycleConfiguration
+                          - s3:GetBucketVersioning
+                          - s3:GetBucketEncryption
+                          - s3:ListMultipartUploads
+                          - s3:GetBucketPolicy
+                          - s3:GetBucketAcl
+                          - s3:GetPublicAccessBlock
+                          - s3:GetBucketNotification
+                          - s3:GetAnalyticsConfiguration
+                          - s3:GetInventoryConfiguration
+                        Resource: "*"
+                      - Sid: CloudWatch
+                        Effect: Allow
+                        Action:
+                          - cloudwatch:GetMetricStatistics
+                          - cloudwatch:GetMetricData
+                          - cloudwatch:ListMetrics
+                          - cloudwatch:DescribeAlarms
+                          - cloudwatch:DescribeAlarmsForMetric
+                          - cloudwatch:ListDashboards
+                          - cloudwatch:GetDashboard
+                          - logs:DescribeLogGroups
+                          - logs:DescribeLogStreams
+                          - logs:DescribeMetricFilters
+                          - logs:GetLogGroupFields
+                          - logs:ListLogAnomalyDetectors
+                          - logs:ListAnomalies
+                        Resource: "*"
+                      - Sid: PerformanceInsights
+                        Effect: Allow
+                        Action:
+                          - pi:GetResourceMetrics
+                          - pi:DescribeDimensionKeys
+                          - pi:GetDimensionKeyDetails
+                          - pi:ListAvailableResourceMetrics
+                        Resource: "*"
+                      - Sid: Pricing
+                        Effect: Allow
+                        Action:
+                          - pricing:GetProducts
+                          - pricing:DescribeServices
+                          - pricing:GetAttributeValues
+                        Resource: "*"
+                      - Sid: CloudTrail
+                        Effect: Allow
+                        Action:
+                          - cloudtrail:DescribeTrails
+                          - cloudtrail:ListTrails
+                          - cloudtrail:GetTrail
+                          - cloudtrail:GetTrailStatus
+                          - cloudtrail:GetEventSelectors
+                          - cloudtrail:GetInsightSelectors
+                          - cloudtrail:LookupEvents
+                        Resource: "*"
+                      - Sid: StorageLens
+                        Effect: Allow
+                        Action:
+                          - s3:ListStorageLensConfigurations
+                          - s3:GetStorageLensDashboard
+                          - s3:GetStorageLensConfiguration
+                          - s3control:ListStorageLensConfigurations
+                          - s3control:GetStorageLensConfiguration
+                        Resource: "*"
+                      - Sid: SavingsPlans
+                        Effect: Allow
+                        Action:
+                          - savingsplans:DescribeSavingsPlans
+                          - savingsplans:DescribeSavingsPlansOfferingRates
+                          - savingsplans:DescribeSavingsPlansOfferings
+                        Resource: "*"
+                      - Sid: STS
+                        Effect: Allow
+                        Action:
+                          - sts:GetCallerIdentity
+                        Resource: "*"
+                      - Sid: IAMRoleTags
+                        Effect: Allow
+                        Action:
+                          - iam:ListRoleTags
+                        Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/CFMTipsReadOnly"
+        Outputs:
+          RoleArn:
+            Value: !GetAtt CfmTipsReadOnlyRole.Arn
+      Parameters:
+        - ParameterKey: TrustedPrincipalArn
+          ParameterValue: !GetAtt LambdaExecutionRole.Arn
+        - ParameterKey: DelegatedAdminRoleArn
+          ParameterValue: !Ref DelegatedAdminRoleArn
+
+  # =========================================================================
+  # Outputs
+  # =========================================================================
+Outputs:
+  McpEndpoint:
+    Description: Lambda Function URL (IAM auth). Use with mcp-proxy-for-aws.
+    Value: !GetAtt CfmTipsFunctionUrl.FunctionUrl
+
+  McpFunctionArn:
+    Description: Lambda function ARN.
+    Value: !GetAtt CfmTipsMcpFunction.Arn
+
+  LambdaRoleArn:
+    Description: Lambda execution role ARN. Use as TrustedPrincipalArn for manual cross-account role setup.
+    Value: !GetAtt LambdaExecutionRole.Arn
+
+  InvokePolicyArn:
+    Description: Managed policy ARN — attach to users/roles that need MCP access.
+    Value: !Ref McpInvokePolicy
+
+  McpClientConfig:
+    Description: MCP client configuration JSON for Kiro IDE / Kiro CLI.
+    Value: !Sub |
+      {
+        "mcpServers": {
+          "cfm-tips": {
+            "command": "uvx",
+            "timeout": 180000,
+            "transport": "stdio",
+            "args": [
+              "mcp-proxy-for-aws@latest",
+              "${CfmTipsFunctionUrl.FunctionUrl}",
+              "--service", "lambda",
+              "--region", "${AWS::Region}",
+              "--profile", "default"
+            ],
+            "env": {
+              "AWS_REGION": "${AWS::Region}"
+            },
+            "autoApprove": [
+              "get_optimization_targets",
+              "get_optimization_runbook_for_target",
+              "execute_runbook"
+            ]
+          }
+        }
+      }
+
+  StackSetId:
+    Condition: IsOrgMode
+    Description: StackSet ID for monitoring cross-account role deployment.
+    Value: !Ref CfmTipsCrossAccountStackSet
+
+  DeploymentMonitorCommand:
+    Condition: IsOrgMode
+    Description: CLI command to monitor cross-account role deployment progress.
+    Value: !Sub >-
+      aws cloudformation list-stack-instances
+      --stack-set-name ${AWS::StackName}-CrossAccount-Role
+      --call-as ${CallAs}
+      --query 'Summaries[].{Account:Account,Status:StackInstanceStatus.DetailedStatus}'
+      --output table

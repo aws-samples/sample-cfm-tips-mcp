@@ -1,0 +1,246 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  CFM Tips — Remote MCP Server on AWS Lambda (Streamable HTTP).
+  Lambda Function URL with IAM auth — no API Gateway timeout limits.
+
+Resources:
+
+  CfmTipsMcpFunction:
+    # checkov:skip=CKV_AWS_116:DLQ not needed for synchronous MCP request-response Lambda
+    # checkov:skip=CKV_AWS_117:VPC not required for read-only AWS API calls
+    # checkov:skip=CKV_AWS_173:No sensitive data in environment variables
+    # checkov:skip=CKV_AWS_115:Concurrency managed by Lambda Function URL throttling
+    Type: AWS::Serverless::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "VPC not required — Lambda only makes read-only AWS API calls"
+          - id: W92
+            reason: "Concurrency managed by Lambda Function URL throttling"
+          - id: W11
+            reason: "Read-only describe/get actions require wildcard resource for cross-service analysis"
+          - id: W76
+            reason: "High SPCM expected — policy covers 15+ AWS services for cost optimization"
+    Properties:
+      PackageType: Image
+      Description: CFM Tips MCP Server — cost optimization via Streamable HTTP
+      Architectures:
+        - arm64
+      Timeout: 120
+      MemorySize: 1024
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+      FunctionUrlConfig:
+        AuthType: AWS_IAM
+        InvokeMode: BUFFERED
+        Cors:
+          AllowHeaders:
+            - Content-Type
+            - Accept
+            - Mcp-Session-Id
+          AllowMethods:
+            - POST
+            - GET
+            - DELETE
+          AllowOrigins:
+            - "*"
+          MaxAge: 600
+      Policies:
+        - Statement:
+            - Sid: CostExplorer
+              Effect: Allow
+              Action:
+                - ce:GetCostAndUsage
+                - ce:GetCostForecast
+                - ce:GetSavingsPlansUtilization
+                - ce:GetSavingsPlansCoverage
+                - ce:GetReservationUtilization
+                - ce:GetReservationCoverage
+                - ce:GetUsageReport
+                - ce:GetCostCategories
+                - ce:ListCostAllocationTags
+                - ce:ListCostCategoryDefinitions
+              Resource: "*"
+            - Sid: CostOptimizationHub
+              Effect: Allow
+              Action:
+                - cost-optimization-hub:ListEnrollmentStatuses
+                - cost-optimization-hub:ListRecommendations
+                - cost-optimization-hub:GetRecommendation
+                - cost-optimization-hub:ListRecommendationSummaries
+                - cost-optimization-hub:GetRecommendationSummary
+                - cost-optimization-hub:GetSavingsPlansRecommendations
+              Resource: "*"
+            - Sid: ComputeOptimizer
+              Effect: Allow
+              Action:
+                - compute-optimizer:GetEnrollmentStatus
+                - compute-optimizer:GetEC2InstanceRecommendations
+                - compute-optimizer:GetEBSVolumeRecommendations
+                - compute-optimizer:GetLambdaFunctionRecommendations
+                - compute-optimizer:GetAutoScalingGroupRecommendations
+                - compute-optimizer:GetECSServiceRecommendations
+                - compute-optimizer:GetRecommendationSummaries
+              Resource: "*"
+            - Sid: TrustedAdvisor
+              Effect: Allow
+              Action:
+                - trustedadvisor:DescribeCheckItems
+                - trustedadvisor:DescribeCheckResult
+                - trustedadvisor:ListChecks
+                - trustedadvisor:ListRecommendations
+                - trustedadvisor:GetRecommendation
+                - support:DescribeTrustedAdvisorChecks
+                - support:DescribeTrustedAdvisorCheckResult
+                - support:RefreshTrustedAdvisorCheck
+                - support:DescribeSeverityLevels
+              Resource: "*"
+            - Sid: DescribeResources
+              Effect: Allow
+              Action:
+                - ec2:DescribeInstances
+                - ec2:DescribeInstanceTypes
+                - ec2:DescribeInstanceStatus
+                - ec2:DescribeVolumes
+                - ec2:DescribeSnapshots
+                - ec2:DescribeImages
+                - ec2:DescribeAddresses
+                - ec2:DescribeNatGateways
+                - ec2:DescribeRegions
+                - ec2:DescribeFlowLogs
+                - ec2:DescribeRouteTables
+                - ec2:DescribeVpcs
+                - ec2:DescribeSubnets
+                - ec2:DescribeCapacityReservations
+                - ec2:DescribeReservedInstances
+                - ec2:DescribeReservedInstancesOfferings
+                - ec2:DescribeSpotInstanceRequests
+                - ec2:DescribeSpotPriceHistory
+                - ec2:GetEbsEncryptionByDefault
+                - ec2:GetEbsDefaultKmsKeyId
+                - rds:DescribeDBInstances
+                - rds:DescribeDBClusters
+                - rds:DescribeDBSnapshots
+                - rds:DescribeDBClusterSnapshots
+                - rds:DescribeReservedDBInstances
+                - rds:DescribeReservedDBInstancesOfferings
+                - lambda:ListFunctions
+                - lambda:GetFunction
+                - lambda:GetFunctionConfiguration
+                - lambda:ListTags
+                - lambda:ListProvisionedConcurrencyConfigs
+                - s3:ListAllMyBuckets
+                - s3:GetBucketLocation
+                - s3:ListBucket
+                - s3:ListObjectsV2
+                - s3:GetBucketTagging
+                - s3:GetBucketLifecycleConfiguration
+                - s3:GetBucketVersioning
+                - s3:GetBucketEncryption
+                - s3:ListMultipartUploads
+                - s3:GetBucketPolicy
+                - s3:GetBucketAcl
+                - s3:GetPublicAccessBlock
+                - s3:GetBucketNotification
+                - s3:GetAnalyticsConfiguration
+                - s3:GetInventoryConfiguration
+              Resource: "*"
+            - Sid: CloudWatch
+              Effect: Allow
+              Action:
+                - cloudwatch:GetMetricStatistics
+                - cloudwatch:GetMetricData
+                - cloudwatch:ListMetrics
+                - cloudwatch:DescribeAlarms
+                - cloudwatch:DescribeAlarmsForMetric
+                - cloudwatch:ListDashboards
+                - cloudwatch:GetDashboard
+                - logs:DescribeLogGroups
+                - logs:DescribeLogStreams
+                - logs:DescribeMetricFilters
+                - logs:GetLogGroupFields
+                - logs:ListLogAnomalyDetectors
+                - logs:ListAnomalies
+              Resource: "*"
+            - Sid: PerformanceInsights
+              Effect: Allow
+              Action:
+                - pi:GetResourceMetrics
+                - pi:DescribeDimensionKeys
+                - pi:GetDimensionKeyDetails
+                - pi:ListAvailableResourceMetrics
+              Resource: "*"
+            - Sid: Pricing
+              Effect: Allow
+              Action:
+                - pricing:GetProducts
+                - pricing:DescribeServices
+                - pricing:GetAttributeValues
+              Resource: "*"
+            - Sid: CloudTrail
+              Effect: Allow
+              Action:
+                - cloudtrail:DescribeTrails
+                - cloudtrail:ListTrails
+                - cloudtrail:GetTrail
+                - cloudtrail:GetTrailStatus
+                - cloudtrail:GetEventSelectors
+                - cloudtrail:GetInsightSelectors
+                - cloudtrail:LookupEvents
+              Resource: "*"
+            - Sid: StorageLens
+              Effect: Allow
+              Action:
+                - s3:ListStorageLensConfigurations
+                - s3:GetStorageLensDashboard
+                - s3:GetStorageLensConfiguration
+                - s3control:ListStorageLensConfigurations
+                - s3control:GetStorageLensConfiguration
+              Resource: "*"
+            - Sid: SavingsPlans
+              Effect: Allow
+              Action:
+                - savingsplans:DescribeSavingsPlans
+                - savingsplans:DescribeSavingsPlansOfferingRates
+                - savingsplans:DescribeSavingsPlansOfferings
+              Resource: "*"
+            - Sid: STS
+              Effect: Allow
+              Action:
+                - sts:GetCallerIdentity
+              Resource: "*"
+            - Sid: STSAssumeRole
+              Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource: "arn:aws:iam::*:role/CFMTipsReadOnly"
+    Metadata:
+      Dockerfile: remote-deployment/Dockerfile
+      DockerContext: ../
+      DockerTag: latest
+
+  McpInvokePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${AWS::StackName}-mcp-invoke"
+      Description: "Allows lambda:InvokeFunctionUrl on the CFM Tips MCP Lambda."
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: lambda:InvokeFunctionUrl
+            Resource: !GetAtt CfmTipsMcpFunction.Arn
+
+Outputs:
+  McpEndpoint:
+    Description: "Lambda Function URL (IAM auth, 120s timeout)."
+    Value: !GetAtt CfmTipsMcpFunctionUrl.FunctionUrl
+  McpFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt CfmTipsMcpFunction.Arn
+  InvokePolicyArn:
+    Description: "Managed policy ARN for MCP access."
+    Value: !Ref McpInvokePolicy

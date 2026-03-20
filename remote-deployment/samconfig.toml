@@ -1,0 +1,9 @@
+version = 0.1
+[default.deploy.parameters]
+stack_name = "CFM-TIPs-Remote-MCP"
+resolve_s3 = true
+s3_prefix = "CFM-TIPs-Remote-MCP"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_NAMED_IAM"
+image_repositories = []
