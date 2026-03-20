@@ -10,12 +10,9 @@ RUN pip install --quiet --no-cache-dir -r /tmp/requirements.txt
 # Copy handler
 COPY remote-deployment/handler.py ${LAMBDA_TASK_ROOT}/
 
-# Copy project source (no duplication — references repo root)
-COPY playbook_resolver.py ${LAMBDA_TASK_ROOT}/
+# Copy project source — legacy architecture (what's on main)
+COPY mcp_server_with_runbooks.py ${LAMBDA_TASK_ROOT}/
 COPY runbook_functions.py ${LAMBDA_TASK_ROOT}/
-COPY abstract_playbooks/ ${LAMBDA_TASK_ROOT}/abstract_playbooks/
-COPY concrete_playbooks/ ${LAMBDA_TASK_ROOT}/concrete_playbooks/
-COPY datasources/ ${LAMBDA_TASK_ROOT}/datasources/
 COPY services/ ${LAMBDA_TASK_ROOT}/services/
 COPY utils/ ${LAMBDA_TASK_ROOT}/utils/
 COPY playbooks/ ${LAMBDA_TASK_ROOT}/playbooks/

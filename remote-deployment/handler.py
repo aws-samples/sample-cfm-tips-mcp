@@ -2,11 +2,11 @@
 """
 CFM Tips — AWS Lambda handler for remote MCP over Streamable HTTP.
 
-Uses awslabs.mcp_lambda_handler to expose the progressive discovery API
+Uses awslabs.mcp_lambda_handler to expose the legacy tool surface
 as a Lambda-backed MCP server invokable via HTTP.
 
-Supports cross-account analysis via STS AssumeRole — pass a role_arn
-parameter to any tool to analyze a different AWS account.
+Wraps the existing mcp_server_with_runbooks call_tool dispatcher
+so every tool available locally is also available remotely.
 """
 
 import asyncio
@@ -23,7 +23,6 @@ from awslabs.mcp_lambda_handler import MCPLambdaHandler
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils.logging_config import setup_logging
-from playbook_resolver import GlobalResolver, ToolNotAvailableError
 
 logger = setup_logging()
 
@@ -34,13 +33,6 @@ mcp_server = MCPLambdaHandler(
     name="cfm-tips",
     version="1.0.0",
 )
-
-# ---------------------------------------------------------------------------
-# Global resolver — singleton, lazy-initializes on first tool call via
-# _ensure_started().  Lambda can't await at module level, so we accept
-# the lazy path here.  For non-Lambda contexts prefer GlobalResolver.create().
-# ---------------------------------------------------------------------------
-global_resolver = GlobalResolver()
 
 
 def _run_async(coro):
@@ -58,51 +50,157 @@ def _run_async(coro):
 
 
 # ---------------------------------------------------------------------------
-# Tool definitions
+# Import the legacy call_tool dispatcher — it handles all tool routing
+# ---------------------------------------------------------------------------
+from mcp_server_with_runbooks import call_tool, list_tools as legacy_list_tools
+
+
+def _call_legacy_tool(tool_name: str, arguments: dict) -> str:
+    """Call a legacy tool and return its text result as a string."""
+    results = _run_async(call_tool(tool_name, arguments))
+    # call_tool returns List[TextContent], extract text
+    texts = []
+    for r in results:
+        if hasattr(r, 'text'):
+            texts.append(r.text)
+        else:
+            texts.append(str(r))
+    return "\n".join(texts)
+
+
+# ---------------------------------------------------------------------------
+# Progressive discovery tools — thin wrappers that enumerate and dispatch
+# to the legacy tool surface.
 # ---------------------------------------------------------------------------
 
+# Build a tool catalog from the legacy list_tools at import time
+_tool_catalog = None
+
+
+def _get_catalog():
+    global _tool_catalog
+    if _tool_catalog is None:
+        tools = _run_async(legacy_list_tools())
+        _tool_catalog = {t.name: t for t in tools}
+    return _tool_catalog
+
+
+# Group tools by service prefix for the targets endpoint
+_SERVICE_PREFIXES = {
+    "amazon_ec2": ["ec2_"],
+    "amazon_ebs": ["ebs_"],
+    "amazon_rds": ["rds_"],
+    "aws_lambda": ["lambda_"],
+    "amazon_s3": ["s3_"],
+    "aws_cloudtrail": ["cloudtrail", "get_management_trails", "run_cloudtrail"],
+    "amazon_cloudwatch": ["cloudwatch_"],
+    "aws_nat_gateway": ["nat_gateway_"],
+    "database_savings_plans": ["database_savings_plans_"],
+    "aws_cost_services": [
+        "get_cost_explorer_data",
+        "list_coh_enrollment",
+        "get_coh_recommendations",
+        "get_compute_optimizer_recommendations",
+        "get_trusted_advisor_checks",
+        "get_performance_insights_metrics",
+        "comprehensive_analysis",
+    ],
+}
+
+_SERVICE_DISPLAY = {
+    "amazon_ec2": "Amazon EC2",
+    "amazon_ebs": "Amazon EBS",
+    "amazon_rds": "Amazon RDS",
+    "aws_lambda": "AWS Lambda",
+    "amazon_s3": "Amazon S3",
+    "aws_cloudtrail": "AWS CloudTrail",
+    "amazon_cloudwatch": "Amazon CloudWatch",
+    "aws_nat_gateway": "NAT Gateway",
+    "database_savings_plans": "Database Savings Plans",
+    "aws_cost_services": "AWS Cost Services",
+}
+
+
+def _classify_tool(tool_name: str) -> str:
+    """Return the service id a tool belongs to."""
+    for svc_id, prefixes in _SERVICE_PREFIXES.items():
+        for prefix in prefixes:
+            if tool_name == prefix or tool_name.startswith(prefix):
+                return svc_id
+    return "other"
+
+
 @mcp_server.tool()
-def get_optimization_targets(role_arn: str = "") -> str:
+def get_optimization_targets() -> str:
     """Get available AWS services for cost optimization.
 
     Entry point for progressive discovery. Returns service ids,
-    display names, available operation counts, and active data sources.
-
-    Args:
-        role_arn: IAM role ARN to assume for cross-account analysis (optional)
+    display names, and available operation counts.
     """
-    resolver = _run_async(GlobalResolver.for_account(role_arn)) if role_arn else global_resolver
-    result = _run_async(resolver.get_optimization_targets())
-    return json.dumps(result, indent=2, default=str)
+    catalog = _get_catalog()
+    # Group tools by service
+    service_tools = {}
+    for name in catalog:
+        svc = _classify_tool(name)
+        service_tools.setdefault(svc, []).append(name)
+
+    targets = []
+    for svc_id, tools in sorted(service_tools.items()):
+        targets.append({
+            "target_id": svc_id,
+            "display_name": _SERVICE_DISPLAY.get(svc_id, svc_id),
+            "operation_count": len(tools),
+        })
+
+    return json.dumps({
+        "status": "success",
+        "targets": targets,
+        "total_operations": len(catalog),
+    }, indent=2)
 
 
 @mcp_server.tool()
-def get_optimization_runbook_for_target(target: str, role_arn: str = "") -> str:
+def get_optimization_runbook_for_target(target: str) -> str:
     """Get available optimization operations for a target service.
 
-    Returns operation names, descriptions, parameters, and the
-    data source backing each operation.
+    Returns operation names, descriptions, and parameters.
 
     Args:
         target: Target id from get_optimization_targets (e.g. 'amazon_ec2')
-        role_arn: IAM role ARN to assume for cross-account analysis (optional)
     """
-    resolver = _run_async(GlobalResolver.for_account(role_arn)) if role_arn else global_resolver
-    result = _run_async(resolver.get_operations_for_target(target))
-    return json.dumps(result, indent=2, default=str)
+    catalog = _get_catalog()
+    operations = []
+    for name, tool in catalog.items():
+        if _classify_tool(name) == target:
+            operations.append({
+                "operation": name,
+                "description": tool.description,
+                "parameters": tool.inputSchema.get("properties", {}),
+            })
+
+    if not operations:
+        return json.dumps({
+            "status": "error",
+            "message": f"No operations found for target '{target}'",
+        }, indent=2)
+
+    return json.dumps({
+        "status": "success",
+        "target": target,
+        "display_name": _SERVICE_DISPLAY.get(target, target),
+        "operations": operations,
+    }, indent=2)
 
 
 @mcp_server.tool()
-def execute_runbook(operation: str, parameters: dict = None, role_arn: str = "") -> str:
+def execute_runbook(operation: str, parameters: dict = None) -> str:
     """Execute a specific optimization operation.
 
-    Provide the operation name and parameters. Results include pagination,
-    sorting by savings, and documentation links.
+    Provide the operation name and parameters.
 
     Args:
         operation: Operation name from get_optimization_runbook_for_target
         parameters: Operation parameters as key-value pairs
-        role_arn: IAM role ARN to assume for cross-account analysis (optional)
     """
     params = parameters or {}
     if isinstance(params, str):
@@ -113,33 +211,23 @@ def execute_runbook(operation: str, parameters: dict = None, role_arn: str = "")
     if not isinstance(params, dict):
         params = {}
 
-    effective_role = role_arn or params.pop("role_arn", "") or ""
-    params.pop("role_arn", None)
-
-    resolver = _run_async(GlobalResolver.for_account(effective_role)) if effective_role else global_resolver
-
-    try:
-        target_id, tool_name = _run_async(
-            resolver.resolve_operation_name(operation)
-        )
-    except ToolNotAvailableError as e:
-        return json.dumps({"status": "error", "message": str(e)}, indent=2)
-
-    logger.info(f"Executing {operation} -> {target_id}.{tool_name} with {params}")
+    catalog = _get_catalog()
+    if operation not in catalog:
+        return json.dumps({
+            "status": "error",
+            "message": f"Unknown operation: {operation}",
+        }, indent=2)
 
     try:
-        result = _run_async(
-            resolver.execute_operation(target_id, tool_name, **params)
-        )
+        result = _call_legacy_tool(operation, params)
+        return result
     except Exception as e:
         logger.error(f"execute_runbook error: {e}\n{traceback.format_exc()}")
-        result = {
+        return json.dumps({
             "status": "error",
             "message": str(e),
             "error_type": type(e).__name__,
-        }
-
-    return json.dumps(result, indent=2, default=str)
+        }, indent=2)
 
 
 # ---------------------------------------------------------------------------
